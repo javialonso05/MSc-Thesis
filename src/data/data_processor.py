@@ -3,6 +3,9 @@ import pickle
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+
+from src.features.transformations import shift_signal, cosine_similarity
 
 
 def load_data(base_dir: str):
@@ -148,18 +151,124 @@ def interpolate_data(data_dict: dict):
             interpolated_data[region][core] = {}
             for spw in range(2):
                 # Interpolate data
-                freq_array = data_dict[region][core][spw]['Frequency']
+                freq_array = np.flip(data_dict[region][core][spw]['Frequency'])
                 data = np.array(common_frequency[spw])
                 for key in keys:
-                    data = np.vstack((data, np.interp(common_frequency[spw], freq_array, data_dict[region][core][spw][key])))
+                    data = np.vstack((data, np.interp(common_frequency[spw], freq_array, np.flip(data_dict[region][core][spw][key]), left=0, right=0)))
 
                 interpolated_data[region][core][spw] = pd.DataFrame(data.T, columns=data_dict[region][core][spw].columns)
 
     return interpolated_data
 
 
+def build_array(data_dict: dict, category: str = 'Intensity', spw: int = 1, return_log: bool = True):
+    """
+    Build a numpy array with all the data for a given variable
+    :param data_dict: original data dict
+    :param category: the variable to be searched for
+    :param spw: the spw to be stored
+    :param return_log: flag for returning the mapping of the array
+    :return: variable_array (and mapping)
+    """
+
+    variable_array = []
+    if return_log:
+        mapping = []
+
+    for source in data_dict.keys():
+        for core in data_dict[source].keys():
+            variable_array.append(data_dict[source][core][spw][category])
+            if return_log:
+                mapping.append([source, core, spw])
+
+    return np.array(variable_array) if not return_log else np.array(variable_array), mapping
+
+
+def red_shift_correction(frequency: np.ndarray, signal_array: np.ndarray, reference_signal: np.ndarray = None,
+                         plot_reference: bool = False, v_list = np.linspace(-250, 250, 500)):
+    """
+    Calculate each signal's speed based on their correlation to a reference signal
+    :param frequency: 1D array with the frequencies of the signals in signal_array
+    :param signal_array: 2D array with all the signals to be corrected
+    :param reference_signal: signal to be matched by the other signals
+    :param plot_reference: flag for plotting the reference signal
+    :param v_list: list with the velocities to be searched in the broad search phase
+    :return: corrected signals and velocity list
+    """
+
+    # Create the reference signal if it is not passed as an input
+    if reference_signal is None:
+        # Determine the frequencies at which peaks are most likely expected
+        peaks = [
+            220398.684,  # 13CO(2-1)
+            219949.433,  # SO(5,6-4,5)
+            219560.358   # C18O(2-1)
+        ]
+        peak_loc = [np.argmin(np.abs(frequency - peak)) for peak in peaks]
+
+        reference_signal = np.zeros_like(frequency)
+        for peak_location in peak_loc:
+            width = 20
+            reference_signal += np.exp(-((np.arange(len(frequency)) - peak_location) ** 2 / (2 * width ** 2)))
+
+    if plot_reference:
+        plt.figure(figsize=(10, 6))
+        plt.plot(frequency, reference_signal/np.max(reference_signal))
+        plt.xlabel('Frequency [MHz]')
+        plt.ylabel('Intensity [Jy]')
+
+        plt.axvline(220398.684, color='black', linestyle='--', label=r'$^{13}$CO(2-1)')
+        plt.axvline(219949.433, color='green', linestyle='--', label=r'SO(5,6-4,5)')
+        plt.axvline(219560.358, color='purple', linestyle='--', label=r'C$^{18}$O(2-1)')
+
+        plt.legend()
+        plt.show()
+
+    corrected_signals = np.zeros_like(signal_array)
+    signal_velocities = []
+    for i in tqdm(range(len(signal_array)), desc='Shifting signals'):
+        signal = signal_array[i]
+        signal[signal < 0] = 0  # Remove negative values
+
+        # Find broad alignment
+        max_sim = -1
+        best_vel = 0
+        for v in v_list:
+            shifted_signal = shift_signal(frequency, signal, v)[0]
+            similarity = cosine_similarity(shifted_signal, reference_signal)
+
+            if similarity > max_sim:
+                max_sim = similarity
+                best_vel = v
+
+        # Fine-tune alignment
+        max_sim = -1
+        dv = 1 / 5
+        v = best_vel - (1 - dv)
+        while np.abs(dv) > 1e-10:
+            v += dv
+            sim = cosine_similarity(reference_signal, shift_signal(frequency, signal, v)[0])
+
+            if sim < max_sim:
+                dv /= -2
+
+            max_sim = sim
+
+        corrected_signals[i] = shift_signal(frequency, signal, v)[0]
+        signal_velocities.append(v)
+
+    return corrected_signals, signal_velocities
+
+
 if __name__ == "__main__":
-    original_data = pickle.load(open('Data/Raw/data_dict.pkl', 'rb'))
-    interpolated_data = interpolate_data(original_data)
-    with open('Data/Raw/interpolated_data_dict.pkl', 'wb') as f:
-        pickle.dump(interpolated_data, f)
+    # raw_data = pickle.load(open("Data/Raw/data_dict.pkl", "rb"))
+    # interpolated_data = interpolate_data(raw_data)
+    #
+    # with open('Data/Raw/interpolated_data_dict.pkl', 'wb') as f:
+    #     pickle.dump(interpolated_data, f)
+
+    interpolated_data = pickle.load(open('Data/Raw/interpolated_data_dict.pkl', 'rb'))
+    intensity_array, mapping = build_array(interpolated_data)
+    f1 = interpolated_data['100132']['core1'][1]['Frequency']
+
+    corrected_signals, red_shift_velocities = red_shift_correction(frequency=f1, signal_array=intensity_array)
