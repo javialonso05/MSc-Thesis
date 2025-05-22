@@ -5,8 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="524eedd7-a08c-44e1-ab6e-a7c851805f7c" name="Changes" comment="Data loaded and interpolated">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/data/data_processor.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/data_processor.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/features/transformations.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/features/transformations.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -45,7 +45,7 @@
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "main",
     "ignore.virus.scanning.warn.message": "true",
-    "last_opened_file_path": "C:/Users/Javier/Downloads/sig_and_sub.png",
+    "last_opened_file_path": "C:/Users/Javier/Downloads",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -167,7 +167,7 @@
       <workItem from="1747320685059" duration="114000" />
       <workItem from="1747320806760" duration="31405000" />
       <workItem from="1747562880232" duration="25791000" />
-      <workItem from="1747726345383" duration="31120000" />
+      <workItem from="1747726345383" duration="44121000" />
     </task>
     <servers />
   </component>

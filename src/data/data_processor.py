@@ -354,6 +354,51 @@ def majority_voting(velocity_array: np.ndarray, threshold: float = 5):
     return np.array(most_likely_velocity)
 
 
+def probability_find_v(find_samples, no_find_samples, x2 = np.linspace(0, 10, 300)):
+    """
+    Find and plot the probability of finding the signal's velocity given its SNR
+    :param find_samples: 1D array with the SNR of the signals whose velocity was found
+    :param no_find_samples: 1D array with the SNR of the signals whose velocity was not found
+    :param x2: SNR where to evaluate the probability of finding the signal's velocity
+    :return: probability of finding the velocity given x2
+    """
+
+    from sklearn.neighbors import KernelDensity
+
+    find_kde = KernelDensity(kernel='gaussian').fit(find_samples.reshape(-1, 1))
+    no_find_kde = KernelDensity(kernel='exponential').fit(no_find_samples.reshape(-1, 1))
+
+    f1 = np.exp(find_kde.score_samples(x2.reshape(-1, 1)))  # Find v pdf
+    f2 = np.exp(no_find_kde.score_samples(x2.reshape(-1, 1)))  # Not find v pdf
+    p1 = len(find_samples) / (len(find_samples) + len(no_find_samples))  # Find v prior
+    p2 = len(no_find_samples) / (len(find_samples) + len(no_find_samples))  # Not find v prior
+    p = p1 * f1 / (p1 * f1 + p2 * f2)
+
+    # Plot
+    plt.figure(figsize=(5, 4))
+
+    plt.plot(x2, f1, color='tab:green', label='Find v PDF')
+    plt.plot(x2, f2, color='tab:red', label='Not find v PDF')
+
+    plt.xlabel('SNR [dB]')
+    plt.ylabel('Probability density')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(5, 4))
+    plt.plot(x2, p, color='tab:blue', label='P(Find v | SNR)')
+    plt.xlabel('SNR [dB]')
+    plt.ylabel('Probability')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    return p
+
+
 if __name__ == "__main__":
     # raw_data = pickle.load(open("Data/Raw/data_dict.pkl", "rb"))
     # interpolated_data = interpolate_data(raw_data)
@@ -401,26 +446,3 @@ if __name__ == "__main__":
     # Load signal data
     data_info = pd.read_csv('Data/data_info.csv')
 
-    # Calculate velocities
-    filtered_data_10 = []
-    filtered_data_20 = []
-    velocity_array_10 = [red_shift_correction(f1, intensity_array, width=10)]
-    if not np.any(intensity_array < 0):
-        print('Intensity gets edited')
-        intensity_array = build_array(interpolated_data, category='Intensity')[0]
-    velocity_array_20 = [red_shift_correction(f1, intensity_array, width=20)]
-
-    for method in ['sigma', 'subtraction', 'savgol']:
-        if not np.any(intensity_array < 0):
-            intensity_array = build_array(interpolated_data, category='Intensity')[0]
-        filtered_data_10.append(filter_data(intensity_array, method, residual_array))
-        velocity_array_10.append(red_shift_correction(f1, filtered_data_10[-1], width=10))
-
-        if not np.any(intensity_array < 0):
-            intensity_array = build_array(interpolated_data, category='Intensity')[0]
-
-        filtered_data_20.append(filter_data(intensity_array, method, residual_array))
-        velocity_array_20.append(red_shift_correction(f1, filtered_data_10[-1], width=20))
-
-    best_velocity_10 = majority_voting(np.array(velocity_array_10).T)
-    best_velocity_20 = majority_voting(np.array(velocity_array_20).T)
