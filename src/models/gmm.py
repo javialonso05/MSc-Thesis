@@ -2,13 +2,63 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import umap
-from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score
+from scipy.stats import gaussian_kde
 from sklearn.mixture import GaussianMixture
 
 from src.data.data_processor import build_array, filter_data
 from src.features.transformations import shift_signal
+
+
+def plot_kde_gmm(data, bandwidth=None, gridsize=100, n_components=3):
+    if data.shape[1] != 2:
+        raise ValueError("Input data must be of shape (N,2)")
+
+    x, y = data[:, 0], data[:, 1]
+
+    # Perform kernel density estimation
+    kde = gaussian_kde([x, y], bw_method=bandwidth)
+
+    # Fit Gaussian Mixture Model (GMM)
+    if n_components > 0:
+        gmm = GaussianMixture(n_components=n_components, random_state=42)
+        labels = gmm.fit_predict(data)
+    else:
+        labels = np.ones(len(data))
+
+    # Create grid for evaluation
+    xmin, xmax = x.min() - 0.1, x.max() + 0.1
+    ymin, ymax = y.min() - 0.1, y.max() + 0.1
+    X, Y = np.meshgrid(np.linspace(xmin, xmax, gridsize), np.linspace(ymin, ymax, gridsize))
+    XY_grid = np.column_stack([X.ravel(), Y.ravel()])
+
+    # Evaluate KDE on the grid
+    Z_kernel = kde(np.vstack([X.ravel(), Y.ravel()])).reshape(X.shape)
+    if n_components > 0:
+        Z = np.exp(gmm.score_samples(XY_grid))
+        Z = Z.reshape(X.shape)
+
+    # Plot results
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    plt.pcolormesh(X, Y, Z_kernel, shading='auto', cmap='viridis')
+    plt.colorbar(label='Density')
+
+    scatter = ax.scatter(x, y, c=labels, cmap='Set1', s=30, alpha=0.6, label='Data Points')  # Data Points
+
+    if n_components > 0:
+        plt.contour(X, Y, Z, levels=10, cmap='coolwarm')  # GMM results
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+
+    fig.suptitle("Kernel Density Estimation with GMM Classification")
+    legend1 = ax.legend(*scatter.legend_elements(), title="Classes")
+    ax.add_artist(legend1)
+
+    plt.show()
+    if n_components > 0:
+        return gmm
+
 
 if __name__ == '__main__':
     import pickle
@@ -42,44 +92,20 @@ if __name__ == '__main__':
     subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
     savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
 
-    # PCA decomposition
-    pca = PCA(n_components=30, random_state=42)
-    pca_data = pca.fit_transform(shifted_signals)
+    # Find old data index
+    shifted_mapping = [shifted_mapping[i][:-1] for i in range(len(shifted_mapping))]
+    old_data_idx = np.load('Data/old_data_idx.npy')
 
-    # UMAP decomposition
-    up = umap.UMAP(n_neighbors=5, min_dist=0, random_state=42, metric='cosine')
-    umap_data = up.fit_transform(shifted_signals)
+    # Perform UMAP reduction with the old data
+    import umap
+
+    up = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit(subtraction_signal[old_data_idx])
+    # old_umap_data = up.transform(subtraction_signal[old_data_idx])
+    new_umap_data = up.transform(subtraction_signal)
+
+    # Remove very far-away clusters
+    umap_data = new_umap_data[np.where(new_umap_data[:, 0] > 0)[0]]
 
     s_score = []
-    for n in tqdm(range(2, 13)):
-        score = []
-
-        # PCA
-        gmm = GaussianMixture(n_components=n, random_state=42)
-        gmm.fit(pca_data)
-
-        prob = gmm.predict_proba(pca_data).max(axis=1)
-        high_confidence_mask = prob > 0.9
-        score.append(silhouette_score(shifted_signals[high_confidence_mask],
-                                      gmm.predict(pca_data[high_confidence_mask]), metric='cosine'))
-
-        # UMAP
-        gmm = GaussianMixture(n_components=n, random_state=42)
-        gmm.fit(umap_data)
-
-        prob = gmm.predict_proba(umap_data).max(axis=1)
-        high_confidence_mask = prob > 0.9
-        score.append(silhouette_score(shifted_signals[high_confidence_mask],
-                                      gmm.predict(umap_data[high_confidence_mask]), metric='cosine'))
-
-        s_score.append(score)
-
-    s_score = np.array(s_score)
-
-    plt.plot(range(2, 13), s_score, marker='o')
-    plt.xlabel('Number of components')
-    plt.ylabel('Silhouette score')
-    plt.xticks(ticks=range(2, 13, 2))
-    plt.legend(['PCA', 'UMAP'])
-    plt.tight_layout()
-    plt.show()
+    for n in tqdm(range(2, 10), desc='Plotting GMM:'):
+        gmm = plot_kde_gmm(umap_data, n_components=n)
