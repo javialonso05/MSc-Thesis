@@ -5,9 +5,11 @@ import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-from src.features.transformations import shift_signal, cosine_similarity
+from sklearn.metrics.pairwise import cosine_similarity
+from src.features.transformations import shift_signal, transform_signal
 
 
+# Loading data functions
 def load_data(base_dir: str):
     """
     Load data from the original file format into a dictionary with pandas dataframes
@@ -186,6 +188,7 @@ def build_array(data_dict: dict, category: str = 'Intensity', spw: int = 1, retu
     return np.array(variable_array), mapping
 
 
+# Red-shift correction functions
 def red_shift_correction(frequency: np.ndarray, signal_array: np.ndarray, reference_signal: np.ndarray = None,
                          plot_reference: bool = False, v_list = np.linspace(-250, 250, 500),
                          width: float = 10):
@@ -273,6 +276,83 @@ def red_shift_correction(frequency: np.ndarray, signal_array: np.ndarray, refere
     return signal_velocities
 
 
+def best_velocity(velocity_array: np.ndarray, threshold: float = 2):
+    """
+    Find the best velocity amongst all the possible options
+    :param velocity_array: 2D array where every row corresponds to a signal and every column to [Raw, Sigma, Sub, ...]
+    :param threshold: value below which it is considered a match
+    :return: best_v
+    """
+
+    best_v = []
+    for i in range(len(velocity_array)):
+        v = velocity_array[i]
+        v_diff = v - v.reshape(-1, 1)
+
+        if np.abs(v_diff[0, 2]) < threshold and np.abs(v[0]) < 200:
+            best_v.append(v[0])
+            continue
+        elif np.abs(v_diff[0, 1]) < threshold and np.abs(v[0]) < 200:
+            best_v.append(v[0])
+            continue
+        elif np.abs(v_diff[1, 2]) < threshold and np.abs(v[1]) < 200:
+            best_v.append(v[2])
+            continue
+        elif np.abs(v_diff[2, 3]) < threshold and np.abs(v[2]) < 200:
+            best_v.append(v[2])
+            continue
+        else:
+            best_v.append(np.nan)
+
+    return np.array(best_v)
+
+
+def probability_find_v(find_samples, no_find_samples, x2 = np.linspace(0, 10, 300)):
+    """
+    Find and plot the probability of finding the signal's velocity given its SNR
+    :param find_samples: 1D array with the SNR of the signals whose velocity was found
+    :param no_find_samples: 1D array with the SNR of the signals whose velocity was not found
+    :param x2: SNR where to evaluate the probability of finding the signal's velocity
+    :return: probability of finding the velocity given x2
+    """
+
+    from sklearn.neighbors import KernelDensity
+
+    find_kde = KernelDensity(kernel='gaussian').fit(find_samples)
+    no_find_kde = KernelDensity(kernel='exponential').fit(no_find_samples)
+
+    f1 = np.exp(find_kde.score_samples(x2.reshape(-1, 1)))  # Find v pdf
+    f2 = np.exp(no_find_kde.score_samples(x2.reshape(-1, 1)))  # Not find v pdf
+    p1 = len(find_samples) / (len(find_samples) + len(no_find_samples))  # Find v prior
+    p2 = len(no_find_samples) / (len(find_samples) + len(no_find_samples))  # Not find v prior
+    p = p1 * f1 / (p1 * f1 + p2 * f2)
+
+    # Plot
+    plt.figure(figsize=(5, 4))
+
+    plt.plot(x2, f1, color='tab:green', label='Find v PDF')
+    plt.plot(x2, f2, color='tab:red', label='Not find v PDF')
+
+    plt.xlabel('SNR [dB]')
+    plt.ylabel('Probability density')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(5, 4))
+    plt.plot(x2, p, color='tab:blue', label='P(Find v | SNR)')
+    plt.xlabel('SNR [dB]')
+    plt.ylabel('Probability')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    return p
+
+
+# Data transformation functions
 def filter_data(data: np.ndarray, filter_type: str, residual = None, **kwargs):
     """
 
@@ -311,92 +391,6 @@ def filter_data(data: np.ndarray, filter_type: str, residual = None, **kwargs):
         raise ValueError(f'{filter_type} is not recognised as an established filter type')
 
     return filtered_data
-
-
-def majority_voting(velocity_array: np.ndarray, threshold: float = 5):
-    """
-    Determine a signal's velocity based on the most common velocity given a number of methods.
-    :param velocity_array: array with the velocity values for each signal. Each row should be a signal and each column
-    should correspond to the velocity obtained through an independent method. The first row should always be the raw
-    signal velocity
-    :param threshold: maximum absolute velocity difference still considered a match
-    :return: most_likely_velocity
-    """
-
-    # Initialize variables
-    most_likely_velocity = []
-
-    # Iterate over all signals
-    for velocities in tqdm(velocity_array, desc='Calculating majority velocity'):
-        # Initialize empty lists
-        used = np.full(len(velocities), False)
-        groups = []
-
-        # Iterate over every velocity
-        for i, val in enumerate(velocities):
-            if used[i]:
-                continue
-            v_group = [val]  # List with the velocities that coincide between them
-            used[i] = True   # Flag to not repeat the same values
-            for j in range(i + 1, len(velocities)):
-                if not used[j] and abs(val - velocities[j]) <= threshold:
-                    v_group.append(velocities[j])
-                    used[j] = True
-            groups.append(v_group)
-
-        # Find the majority group (must be > 50% of row length)
-        majority_group = max(groups, key=len)
-        if len(majority_group) > len(velocities) / 2:
-            most_likely_velocity.append(np.mean(majority_group))
-        else:
-            most_likely_velocity.append(np.nan)
-
-    return np.array(most_likely_velocity)
-
-
-def probability_find_v(find_samples, no_find_samples, x2 = np.linspace(0, 10, 300)):
-    """
-    Find and plot the probability of finding the signal's velocity given its SNR
-    :param find_samples: 1D array with the SNR of the signals whose velocity was found
-    :param no_find_samples: 1D array with the SNR of the signals whose velocity was not found
-    :param x2: SNR where to evaluate the probability of finding the signal's velocity
-    :return: probability of finding the velocity given x2
-    """
-
-    from sklearn.neighbors import KernelDensity
-
-    find_kde = KernelDensity(kernel='gaussian').fit(find_samples.reshape(-1, 1))
-    no_find_kde = KernelDensity(kernel='exponential').fit(no_find_samples.reshape(-1, 1))
-
-    f1 = np.exp(find_kde.score_samples(x2.reshape(-1, 1)))  # Find v pdf
-    f2 = np.exp(no_find_kde.score_samples(x2.reshape(-1, 1)))  # Not find v pdf
-    p1 = len(find_samples) / (len(find_samples) + len(no_find_samples))  # Find v prior
-    p2 = len(no_find_samples) / (len(find_samples) + len(no_find_samples))  # Not find v prior
-    p = p1 * f1 / (p1 * f1 + p2 * f2)
-
-    # Plot
-    plt.figure(figsize=(5, 4))
-
-    plt.plot(x2, f1, color='tab:green', label='Find v PDF')
-    plt.plot(x2, f2, color='tab:red', label='Not find v PDF')
-
-    plt.xlabel('SNR [dB]')
-    plt.ylabel('Probability density')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-    plt.figure(figsize=(5, 4))
-    plt.plot(x2, p, color='tab:blue', label='P(Find v | SNR)')
-    plt.xlabel('SNR [dB]')
-    plt.ylabel('Probability')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-    return p
 
 
 if __name__ == "__main__":
@@ -439,10 +433,47 @@ if __name__ == "__main__":
     interpolated_data = pickle.load(open('Data/Raw/interpolated_data_dict.pkl', 'rb'))
 
     # Build arrays
+    f0 = interpolated_data['100132']['core1'][0]['Frequency']
     f1 = interpolated_data['100132']['core1'][1]['Frequency']
-    intensity_array, mapping = build_array(interpolated_data, category='Intensity')
-    residual_array = build_array(interpolated_data, category='Residual', return_log=False)
+    freq = np.hstack((f0, f1))
 
-    # Load signal data
+    spw1_array, mapping = build_array(interpolated_data, category='Intensity')
+    spw0_array = build_array(interpolated_data, category='Intensity', spw=0, return_log=False)
+    intensity_array = np.hstack((spw0_array, spw1_array))
+
+    residual_array_spw1 = build_array(interpolated_data, category='Residual', return_log=False)
+    residual_array = np.hstack((build_array(interpolated_data, category='Residual', return_log=False, spw=0), residual_array_spw1))
+
+    # Shift signals
     data_info = pd.read_csv('Data/data_info.csv')
+    best_v = data_info['Best velocity'].values
+
+    shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
+
+    subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
+
+    # Find old data index
+    shifted_mapping = [shifted_mapping[i][:-1] for i in range(len(shifted_mapping))]
+    old_data_idx = np.load('Data/old_data_idx.npy')
+
+    # Perform UMAP reduction with the old data
+    import umap
+
+    up = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit(subtraction_signal[old_data_idx])
+    old_umap_data = up.transform(subtraction_signal[old_data_idx])
+    new_umap_data = up.transform(subtraction_signal)
+
+    fig, ax = plt.subplots(1, 2)
+
+    ax[0].scatter(old_umap_data[:, 0], old_umap_data[:, 1])
+    ax[0].set_title('Old UMAP data')
+
+    ax[1].scatter(new_umap_data[:, 0], new_umap_data[:, 1])
+    ax[1].set_title('New UMAP data')
+
+    plt.tight_layout()
+    plt.show()
+
 

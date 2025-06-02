@@ -1,22 +1,4 @@
 import numpy as np
-from tqdm import tqdm
-
-
-# TODO: move to a more relevant file
-def cosine_similarity(a, b):
-    """
-    Calculate cosine similarity between two vectors or a vector and a matrix
-    :param a: 1D vector
-    :param b: 1D vector or 2D matrix
-    :return: cosine similarity
-    """
-    if len(np.shape(a)) != 1 and len(np.shape(b)) != 1:
-        raise ValueError("At least one input must be a 1D vector")
-
-    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
-        return 0
-
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
 def shift_signal(frequency, signal, velocity):
@@ -103,3 +85,29 @@ def manually_compare_signals(freq, signals, peaks: list = None, labels: list = N
         plt.show()
 
         input()
+
+
+def transform_signal(signal: np.ndarray, method: str):
+    """
+    Transform the signal according to a series of methods
+    :param signal: 1D array of the signal to be transformed
+    :param method: Accepted methods: ['standard', 'pareto', 'min-max', 'sqrt', 'tanh', 'logistic_sigmoid', 'sigmoid']
+    :return:
+    """
+
+    if method == 'standard':
+        return (signal - np.mean(signal)) / np.std(signal)
+    if method == 'pareto':
+        return (signal - np.mean(signal)) / np.sqrt(np.std(signal))
+    if method == 'min-max':
+        return (signal - np.min(signal)) / (np.max(signal) - np.min(signal))
+    if method == 'sqrt':
+        return np.sqrt(signal)
+    if method == 'tanh':
+        return 0.5 * (np.tanh((signal - np.mean(signal)) / (100 * np.std(signal))) + 1)
+    if method == 'logistic_sigmoid':
+        return 1 / (1 + np.exp(-(signal - np.mean(signal))/np.std(signal)))
+    if method == 'sigmoid':
+        return (1 - np.cos(np.pi * signal)) / 2
+
+    raise ValueError('Not accepted method for transformation')
