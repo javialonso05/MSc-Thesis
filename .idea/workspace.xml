@@ -5,12 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="524eedd7-a08c-44e1-ab6e-a7c851805f7c" name="Changes" comment="Data loaded and interpolated">
-      <change afterPath="$PROJECT_DIR$/src/features/evaluation.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/models/gmm.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/models/kmeans.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/data/data_processor.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/data_processor.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/features/transformations.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/features/transformations.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/models/gmm.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/models/gmm.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -41,33 +37,33 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.data_loader.executor": "Run",
-    "Python.data_processor.executor": "Run",
-    "Python.gmm.executor": "Run",
-    "Python.kmeans.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "ignore.virus.scanning.warn.message": "true",
-    "last_opened_file_path": "C:/Users/Javier/Downloads",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "advanced.settings",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.data_loader.executor&quot;: &quot;Run&quot;,
+    &quot;Python.data_processor.executor&quot;: &quot;Run&quot;,
+    &quot;Python.gmm.executor&quot;: &quot;Run&quot;,
+    &quot;Python.kmeans.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/Javier/Downloads&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;advanced.settings&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="QodanaCloudProjectLink">
     <option name="linkedProjectId" value="dXdKk" />
     <option name="linkedProjectName" value="My first project" />
     <option name="organizationId" value="qb1Ox" />
     <option name="userId" value="EgRQY" />
   </component>
-  <component name="RunManager" selected="Python.kmeans">
+  <component name="RunManager" selected="Python.gmm">
     <configuration default="true" type="PythonConfigurationType" factoryName="Python">
       <module name="MSc Thesis" />
       <option name="ENV_FILES" value="" />
@@ -121,9 +117,6 @@
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
       <option name="SDK_HOME" value="" />
       <option name="SDK_NAME" value="Python 3.12 (ICE-CSIC)" />
       <option name="WORKING_DIRECTORY" value="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
@@ -190,9 +183,9 @@
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.kmeans" />
         <item itemvalue="Python.gmm" />
         <item itemvalue="Python.data_processor" />
+        <item itemvalue="Python.kmeans" />
         <item itemvalue="Python.data_loader" />
       </list>
     </recent_temporary>
@@ -226,6 +219,7 @@
       <workItem from="1748441419071" duration="427000" />
       <workItem from="1748441897019" duration="6520000" />
       <workItem from="1748521995898" duration="16969000" />
+      <workItem from="1748853705618" duration="29444000" />
     </task>
     <servers />
   </component>
@@ -257,7 +251,8 @@
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/MSc_Thesis$data_processor.coverage" NAME="data_processor Coverage Results" MODIFIED="1747990655873" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
     <SUITE FILE_PATH="coverage/MSc_Thesis$data_loader.coverage" NAME="data_loader Coverage Results" MODIFIED="1747135969732" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/data" />
-    <SUITE FILE_PATH="coverage/kmeans_py$kmeans.coverage" NAME="kmeans Coverage Results" MODIFIED="1748442657615" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
+    <SUITE FILE_PATH="coverage/kmeans_py$kmeans.coverage" NAME="kmeans Coverage Results" MODIFIED="1748856310596" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
     <SUITE FILE_PATH="coverage/MSc_Thesis$kmeans.coverage" NAME="kmeans Coverage Results" MODIFIED="1748421786325" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
+    <SUITE FILE_PATH="coverage/kmeans_py$data_processor.coverage" NAME="data_processor Coverage Results" MODIFIED="1748861922523" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
   </component>
 </project>

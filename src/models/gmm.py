@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import gaussian_kde
 from sklearn.mixture import GaussianMixture
+from sklearn.metrics import silhouette_score
 
 from src.data.data_processor import build_array, filter_data
 from src.features.transformations import shift_signal
@@ -43,7 +44,7 @@ def plot_kde_gmm(data, bandwidth=None, gridsize=100, n_components=3):
     plt.pcolormesh(X, Y, Z_kernel, shading='auto', cmap='viridis')
     plt.colorbar(label='Density')
 
-    scatter = ax.scatter(x, y, c=labels, cmap='Set1', s=30, alpha=0.6, label='Data Points')  # Data Points
+    scatter = ax.scatter(x, y, c=labels, cmap='tab10', s=30, alpha=0.6, label='Data Points')  # Data Points
 
     if n_components > 0:
         plt.contour(X, Y, Z, levels=10, cmap='coolwarm')  # GMM results
@@ -100,12 +101,64 @@ if __name__ == '__main__':
     import umap
 
     up = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit(subtraction_signal[old_data_idx])
-    # old_umap_data = up.transform(subtraction_signal[old_data_idx])
+    old_umap_data = up.transform(subtraction_signal[old_data_idx])
     new_umap_data = up.transform(subtraction_signal)
+
+    wide_signals = [['126223', 'core7'],
+['586092', 'core39'],
+['586092', 'core65'],
+['641469', 'core14'],
+['644284', 'core79'],
+['667557', 'core74'],
+['737588', 'core31'],
+['801753', 'core41'],
+['801753', 'core46'],
+['801753', 'core51'],
+['801753', 'core55'],
+['801753', 'core56'],
+['801753', 'core59'],
+['801753', 'core60'],
+['801753', 'core61'],
+['801753', 'core64'],
+['801753', 'core66'],
+['801753', 'core68'],
+['801753', 'core70'],
+['G337.4050-00.4071A', 'core23']]
+    wide_idx = [i for i in range(len(shifted_mapping)) if shifted_mapping[i] in wide_signals]
+
 
     # Remove very far-away clusters
     umap_data = new_umap_data[np.where(new_umap_data[:, 0] > 0)[0]]
 
-    s_score = []
-    for n in tqdm(range(2, 10), desc='Plotting GMM:'):
-        gmm = plot_kde_gmm(umap_data, n_components=n)
+    gmm = plot_kde_gmm(umap_data, n_components=7)
+
+    prob = gmm.predict_proba(umap_data)
+    labels = []
+    for i in range(len(prob)):
+        p = prob[i]
+
+        if p[2] > 0.9:
+            labels.append(0)
+        elif p[4] > 0.9:
+            labels.append(1)
+        elif p[5] > 0.9:
+            labels.append(2)
+        elif sum(p[0, 1, 3, 6]) > 0.9:
+            labels.append(3)
+        else:
+            labels.append(np.nan)
+
+    hp_labels = labels[~np.isnan(labels)]
+    hp_signals = subtraction_signal[np.where(new_umap_data[:, 0] > 0)[0]][~np.isnan(labels)]
+
+    fig, ax = plt.subplots(4, 1, sharex=True, figsize=(10, 6))
+
+    cmap = plt.get_cmap('tab10')
+    for i in range(4):
+        ax[i].plot(freq, hp_signals[hp_labels==i].mean(axis=0), label=f'{hp_labels==i} signals')
+        ax[i].legend()
+
+    fig.supxlabel('Frequency [MHz]', fontsize=14)
+    fig.supylabel('Intensity [Jy]', fontsize=14)
+    plt.tight_layout()
+    plt.show()
