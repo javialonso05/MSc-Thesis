@@ -1,6 +1,9 @@
 import numpy as np
 from sklearn.metrics import silhouette_score
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from tqdm import tqdm
+
 
 from sklearn.neighbors import NearestNeighbors
 
@@ -28,6 +31,7 @@ class AgglomerativeClustering:
         self.linkage = None
         self.labels_ = None
         self.label_history = []
+        self.full_history = []
 
         # Hyperparameters - TODO: optimize
         self.K = 1
@@ -74,8 +78,8 @@ class AgglomerativeClustering:
                 self.labels_[int(j)] = i
 
         # Store initial labeling
+        self.full_history.append(self.labels_)
         self.label_history.append(self.labels_)
-
 
     def _build_weighted_knn_graph(self, data: np.ndarray):
         """
@@ -102,7 +106,7 @@ class AgglomerativeClustering:
 
         indices = indices.astype(int)
 
-        # Calculate Sigma^2
+        # # Calculate Sigma^2
         self.sigma2 = 0
         for i in range(n_samples):
             for j in range(self.k_neighbors):
@@ -116,7 +120,6 @@ class AgglomerativeClustering:
         for i in range(len(data)):
             for j in range(self.k_neighbors):
                 self.weights[i][indices[i][j]] = np.exp(-distances[i][j]**2 / self.sigma2)
-
 
     def _calculate_affinity(self):
         """
@@ -196,6 +199,7 @@ class AgglomerativeClustering:
         self._initialize_clustering(data)
 
         clusters = np.unique(self.labels_).tolist()
+        sizes = np.ones(len(clusters))
 
         n_clusters = len(clusters)
         max_cluster = max(clusters)
@@ -216,8 +220,8 @@ class AgglomerativeClustering:
             # Update linkage matrix
             # distance = 10 - affinity for dendrogram to plot correctly
             link = np.array([[clusters[cluster_a], clusters[cluster_b],
-                              20 - self.cluster_affinity_matrix[cluster_a][cluster_b],
-                              self.labels_.count(cluster_a) + self.labels_.count(cluster_b)]])
+                              6 -  self.cluster_affinity_matrix[cluster_a][cluster_b],
+                              sizes[cluster_a] + sizes[cluster_b]]])
 
             if self.linkage is None:
                 self.linkage = link
@@ -226,9 +230,15 @@ class AgglomerativeClustering:
 
             # Merge clusters
             max_cluster += 1
+            self.full_history.append([max_cluster if x == clusters[cluster_a] or x == clusters[cluster_b] else x
+                                      for x in self.full_history[-1]])
+
             clusters.remove(clusters[max(cluster_a, cluster_b)])
             clusters.remove(clusters[min(cluster_a, cluster_b)])
             clusters.append(max_cluster)
+
+            sizes = np.append(sizes, sizes[cluster_a] + sizes[cluster_b])
+            sizes = np.delete(sizes, [cluster_a, cluster_b])
 
             self.labels_ = [max_cluster if x == cluster_a or x == cluster_b else x for x in self.labels_]
             for i, label in enumerate(np.unique(self.labels_)):
@@ -244,62 +254,128 @@ class AgglomerativeClustering:
             # Update affinity matrix
             self._update_affinity(cluster_a, cluster_b)
 
-    def old_fit(self, data: np.ndarray):
+        return self
+
+    def get_cluster_linkage(self):
+        final_n = len(np.unique(self.labels_))  # Final number of clusters
+
+        cluster_idx = {i: np.where(np.array(self.labels_) == i)[0] for i in range(final_n)}
+        final_linkage = {i: [] for i in range(final_n)}
+        for k, (i, j, sim, count) in enumerate(self.linkage):
+            i, j = int(i), int(j)
+
+            # Check index corresponding to these clusters
+            labels = np.array(self.full_history[k])
+            sample_idx = np.where(labels == i)[0][0]
+
+            final_cluster = [n for n in range(final_n) if sample_idx in cluster_idx[n]][0]
+            final_linkage[final_cluster].append([i, j, sim, count])
+
+        final_linkage = {i: np.array(final_linkage[i]) for i in range(final_n)}
+        cluster_mapping = []
+        for i in range(final_n):
+            cluster_labels = np.sort(np.append(final_linkage[i][:, 0], final_linkage[i][:, 1]))
+            mapping = {int(old): int(new) for new, old in enumerate(cluster_labels)}
+            cluster_mapping.append(mapping)
+            for j in range(len(final_linkage[i])):
+                final_linkage[i][j][0] = mapping[final_linkage[i][j][0]]
+                final_linkage[i][j][1] = mapping[final_linkage[i][j][1]]
+
+        return final_linkage, cluster_mapping
+
+    def plot_step_n(self, n: int, data: np.ndarray, frequency: np.ndarray = None):
         """
-        Perform GDL clustering
-        :param data: (array) shape (n_samples, n_features)
+        Plot the cluster that were merged on step -n
+        :param n:
+        :param data:
+        :param frequency:
         :return:
         """
-        #TODO: improve time performance
 
-        # Initial clustering
-        self._initialize_clustering(data)
+        if n > len(self.label_history):
+            raise ValueError(f"Step {n} out of range")
+        if len(data) != len(self.label_history[0]):
+            raise ValueError(f"The amount of data does not match the number of labels")
 
-        clusters = np.unique(self.labels_).tolist()
+        if frequency is None:
+            frequency = np.arange(len(data[0]))
 
-        n_clusters = len(clusters)
-        max_cluster = max(clusters)
+        cluster_a, cluster_b = self.linkage[n][:2]
+        labels = np.array(self.full_history[n])
 
-        # Build k-NN graph
-        self._build_weighted_knn_graph(data)
-        for _ in tqdm(range(n_clusters - 1), desc='Merging clusters'):
-            self._calculate_affinity()
-            if np.all(self.cluster_affinity_matrix <= 0):
-                break
+        if cluster_a not in labels or cluster_b not in labels:
+            raise ValueError(f"Cluster {cluster_a} or {cluster_b} not found at step {n}")
 
-            affinity = self.cluster_affinity_matrix + self.cluster_affinity_matrix.T
-            cluster_a, cluster_b = np.unravel_index(affinity.argmax(), affinity.shape)
+        fig, ax = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
 
-            if cluster_a == cluster_b:
-                break
+        ax[0].plot(frequency, data[labels==cluster_a].mean(axis=0), label=f'{sum(labels == cluster_a)} signals')
+        ax[0].legend(loc='upper right')
 
-            # Update linkage matrix
-            # distance = 10 - affinity for dendrogram to plot correctly
-            link = np.array([[clusters[cluster_a], clusters[cluster_b],
-                              20 - self.cluster_affinity_matrix[cluster_a][cluster_b],
-                              self.labels_.count(cluster_a) + self.labels_.count(cluster_b)]])
+        ax[1].plot(frequency, data[labels == cluster_b].mean(axis=0), label=f'{sum(labels == cluster_b)} signals')
+        ax[1].legend(loc='upper right')
 
-            if self.linkage is None:
-                self.linkage = link
-            else:
-                self.linkage = np.vstack((self.linkage, link))
+        fig.supxlabel("Frequency [MHz]")
+        fig.supylabel("Intensity [Jy]")
+        fig.tight_layout()
 
-            # Merge clusters
-            max_cluster += 1
-            clusters.remove(clusters[max(cluster_a, cluster_b)])
-            clusters.remove(clusters[min(cluster_a, cluster_b)])
-            clusters.append(max_cluster)
+        return fig, ax
 
-            self.labels_ = [max_cluster if x == cluster_a or x == cluster_b else x for x in self.labels_]
-            for i, label in enumerate(np.unique(self.labels_)):
-                self.labels_ = [i if x == label else x for x in self.labels_]
+    def make_movie(self, data, frequency, steps: np.ndarray =None, fps=2, reverse=True, title=None):
+        """
 
-            self.label_history.append(self.labels_)
+        :param data:
+        :param frequency:
+        :param steps:
+        :param fps:
+        :param reverse:
+        :return:
+        """
+        import imageio
+        import os
 
-            # Check if any cluster was merged
-            if len(self.label_history) > 2:
-                if len(np.unique(self.label_history[-1])) == len(np.unique(self.label_history[-2])):
-                    break
+
+        if steps is None:
+            order = -1 if reverse else 1
+            steps = np.arange(1, len(self.label_history)) * order
+
+        filenames = []
+        folder_dir = 'Data/Movies/ac_movies'
+        os.makedirs(folder_dir, exist_ok=True)
+        for step in tqdm(steps, desc='Making movie:'):
+            fig, ax = self.plot_step_n(step, data, frequency)
+            fig.suptitle(f'Step {step}', fontsize=12)
+            plt.savefig(f'{folder_dir}/{abs(step)}.png')
+            plt.close(fig)
+
+            filenames.append(f'{folder_dir}/{abs(step)}.png')
+
+        if title is None:
+            import datetime
+            import time
+            title = f"ac_video_{datetime.date.today()}_{time.time_ns()}"
+
+        with imageio.get_writer(f'Data/Movies/{title}.mp4', fps=fps) as writer:
+            for filename in filenames:
+                image = imageio.imread(filename)
+                writer.append_data(image)
+                os.remove(filename)
+
+        os.rmdir(folder_dir)
+
+    def locate_major_mergers(self, threshold=20):
+        steps = []
+        for i in range(1, len(self.linkage)):
+            labels = np.array(self.full_history[i])
+            cluster_a, cluster_b = self.linkage[i][:2]
+
+            n_signals_a = sum(labels == cluster_a)
+            n_signals_b = sum(labels == cluster_b)
+
+            if n_signals_a > threshold and n_signals_b > threshold:
+                steps.append(i)
+
+        return steps
+
 
 
 def compare_clusterings(list_of_labels: list, plot: bool = True, legend: list = None):
@@ -341,67 +417,119 @@ def compare_clusterings(list_of_labels: list, plot: bool = True, legend: list = 
 
     return coincidence
 
-
+# TODO: create UMAP +/ merging process video representation
 if __name__ == '__main__':
     from src.data.data_processor import build_array, filter_data
     from src.features.transformations import shift_signal
 
+    from scipy.optimize import linear_sum_assignment
     from sklearn.metrics import adjusted_rand_score
     from sklearn.datasets import make_blobs
     import matplotlib.pyplot as plt
     import pandas as pd
     import pickle
 
-
-    data, labels = make_blobs(1000, centers=10, random_state=42)
-
-    new_ac = AgglomerativeClustering(k0_neighbors=2, distance_metric='euclidean')
-    new_ac.fit(data)
-
-    old_ac = AgglomerativeClustering(k0_neighbors=2, distance_metric='euclidean')
-    old_ac.old_fit(data)
-
-    similarity = compare_clusterings([new_ac.label_history, old_ac.label_history], plot=True, legend=[])
-
-
-    # # Load raw data
-    # interpolated_data = pickle.load(open('Data/Raw/interpolated_data_dict.pkl', 'rb'))
+    # Test
+    # data, labels = make_blobs(1000, centers=10, random_state=42)
     #
-    # # Build arrays
-    # f0 = interpolated_data['100132']['core1'][0]['Frequency']
-    # f1 = interpolated_data['100132']['core1'][1]['Frequency']
-    # freq = np.hstack((f0, f1))
+    # new_ac = AgglomerativeClustering(k0_neighbors=1, distance_metric='euclidean')
+    # new_ac.fit(data)
     #
-    # spw1_array, mapping = build_array(interpolated_data, category='Intensity')
-    # spw0_array = build_array(interpolated_data, category='Intensity', spw=0, return_log=False)
-    # intensity_array = np.hstack((spw0_array, spw1_array))
+    # split_linkage, mappings = new_ac.get_cluster_linkage()
     #
-    # residual_array_spw1 = build_array(interpolated_data, category='Residual', return_log=False)
-    # residual_array = np.hstack((build_array(interpolated_data, category='Residual', return_log=False, spw=0), residual_array_spw1))
-    #
-    # # Shift signals
-    # data_info = pd.read_csv('Data/data_info.csv')
-    # best_v = data_info['Best velocity 2'].values
-    #
-    # shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    # shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    # shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
+    # for i in range(max(new_ac.labels_) + 1):
+    #     dendrogram(split_linkage[0])
+    #     plt.title('Dendrogram for cluster {i}'.format(i=i))
+    #     plt.show()
 
-    ## Filter data
-    # subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
+
+    # Load raw data
+    interpolated_data = pickle.load(open('Data/Raw/interpolated_data_dict.pkl', 'rb'))
+
+    # Build arrays
+    f0 = interpolated_data['100132']['core1'][0]['Frequency']
+    f1 = interpolated_data['100132']['core1'][1]['Frequency']
+    freq = np.hstack((f0, f1))
+
+    spw1_array, mapping = build_array(interpolated_data, category='Intensity')
+    spw0_array = build_array(interpolated_data, category='Intensity', spw=0, return_log=False)
+    intensity_array = np.hstack((spw0_array, spw1_array))
+
+    residual_array_spw1 = build_array(interpolated_data, category='Residual', return_log=False)
+    residual_array = np.hstack((build_array(interpolated_data, category='Residual', return_log=False, spw=0), residual_array_spw1))
+
+    # Shift signals
+    data_info = pd.read_csv('Data/data_info.csv')
+    best_v = data_info['Best velocity 2'].values
+
+    shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
+
+    # Filter data
+    subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
     # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
     # savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
 
-    # Find old data index
-    # shifted_mapping = [shifted_mapping[i][:-1] for i in range(len(shifted_mapping))]
-    #
-    # # Train AC algorithm
-    # ac = AgglomerativeClustering(k_neighbors=25, k0_neighbors=1, distance_metric='cosine')
+    # ac = AgglomerativeClustering(k_neighbors=25)
     # ac.fit(subtraction_signal)
+    # pickle.dump(ac, open('models/agglomerative/full_ac_model_25_neighbors.pkl', 'wb'))
+
+    # new_ac = AgglomerativeClustering(k_neighbors=25)
+    # new_ac.fit(subtraction_signal)
+    old_ac = pickle.load(open('models/agglomerative/full_ac_model_25_neighbors.pkl', 'rb'))
+    relevant_steps = old_ac.locate_major_mergers()
+    old_ac.make_movie(subtraction_signal, freq, steps=relevant_steps, title='major_mergers', fps=1)
+
+    # model_dict = {}
+    # final_clusters = []
+    # for filter_method in [None, 'subtraction', 'sigma', 'savgol']:
+    #     data = filter_data(np.asarray(shifted_signals), filter_method, shifted_residual) if filter_method else shifted_signals
+    #     key = filter_method if filter_method else "raw"
     #
-    # old_model = pickle.load(open('models/agglomerative/full_ac_model_25_neighbors.pkl', 'rb'))
-    # similarity = [adjusted_rand_score(ac.label_history[i], old_model.label_history[i]) for i in range(len(old_model.label_history))]
+    #     models = {}
+    #     n_clusters = []
+    #     for n in [5, 10, 15, 20]:
+    #         ac = AgglomerativeClustering(k_neighbors=n)
+    #         ac.fit(shifted_signals)
     #
-    # plt.plot(range(len(old_model.label_history)), similarity)
+    #         models[n] = ac
+    #         n_clusters.append(len(np.unique(ac.labels_)))
+    #
+    #     model_dict[key] = models
+    #     final_clusters.append(n_clusters)
+    #
+    # final_clusters = np.array(final_clusters)
+    # for i, key in enumerate(['raw', 'subtraction', 'sigma', 'savgol']):
+    #     plt.plot([5, 10, 15, 20], final_clusters[i], marker='o', label=key)
+    #
+    # plt.legend(title='Signal type')
+    # plt.xlabel('Number of neighbors')
+    # plt.ylabel('Final number of clusters')
+    # plt.tight_layout()
     # plt.show()
 
+
+    # Train AC algorithm
+    # models = {
+    #     'raw': [],
+    #     'subtraction': [],
+    #     'sigma': [],
+    #     'savgol': []
+    #           }
+    # for filter in [None, 'subtraction', 'sigma', 'savgol']:
+    #     if filter is None:
+    #         data = shifted_signals
+    #         label = 'raw'
+    #     else:
+    #         data = filter_data(np.asarray(shifted_signals), filter, shifted_residual)
+    #         label = filter
+    #
+    #     for n in range(5, 50, 10):
+    #         ac = AgglomerativeClustering(k_neighbors=n, k0_neighbors=1, distance_metric='cosine')
+    #         ac.fit(data)
+    #
+    #         models[label].append(ac)
+    #
+    # with open('models/agglomerative/model_dict.pkl', 'wb') as f:
+    #     pickle.dump(models, f)
