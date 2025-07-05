@@ -1,5 +1,6 @@
 import numpy as np
-from sklearn.metrics import silhouette_score
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import silhouette_score, confusion_matrix
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from tqdm import tqdm
@@ -8,7 +9,7 @@ from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 
 
-class AgglomerativeClustering:
+class CustomAgglomerativeClustering:
     def __init__(self, k_neighbors: int = 10, k0_neighbors: int = 1, distance_metric: str = 'cosine'):
         """
         Graph-based agglomerative clustering based on Zhang et al. (2012)
@@ -193,8 +194,6 @@ class AgglomerativeClustering:
         :param data: (array) shape (n_samples, n_features)
         :return:
         """
-        #TODO: improve time performance
-
         # Initial clustering
         self._initialize_clustering(data)
 
@@ -417,7 +416,32 @@ def compare_clusterings(list_of_labels: list, plot: bool = True, legend: list = 
 
     return coincidence
 
-# TODO: create UMAP +/ merging process video representation
+
+def check_reclustering(signals, centroids, true_labels, pred_labels, cluster):
+    idx = (true_labels == cluster) * (pred_labels != cluster)
+    new_labels = pred_labels[idx]
+
+    for i in np.unique(new_labels):
+        for s in signals[idx][new_labels == i]:
+            fig, ax = plt.subplots(3, 1, sharex=True, figsize=(12, 8))
+            fig.suptitle(f'Cluster {cluster} -> {i}')
+
+            ax[0].plot(freq, centroids[cluster])
+            ax[0].tick_params(bottom=False)
+            ax[0].set_title(f'Centroid {cluster}')
+
+            ax[1].plot(freq, s)
+            ax[1].tick_params(bottom=False)
+            ax[1].set_title(f'Misclasified signals')
+
+            ax[2].plot(freq, centroids[i])
+            ax[2].set_title(f'Centroid {i}')
+
+            fig.supxlabel('Frequency [MHz]', fontsize=12)
+            fig.supylabel('Intensity [Jy]', fontsize=12)
+            plt.show()
+
+
 if __name__ == '__main__':
     from src.data.data_processor import build_array, filter_data
     from src.features.transformations import shift_signal
@@ -468,68 +492,31 @@ if __name__ == '__main__':
 
     # Filter data
     subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
-    # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
-    # savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
+    sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
+    savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
 
-    # ac = AgglomerativeClustering(k_neighbors=25)
-    # ac.fit(subtraction_signal)
-    # pickle.dump(ac, open('models/agglomerative/full_ac_model_25_neighbors.pkl', 'wb'))
+    from src.features.evaluation import piecewise_cosine_distance
+    from sklearn.cluster import AgglomerativeClustering
 
-    # new_ac = AgglomerativeClustering(k_neighbors=25)
-    # new_ac.fit(subtraction_signal)
-    old_ac = pickle.load(open('models/agglomerative/full_ac_model_25_neighbors.pkl', 'rb'))
-    relevant_steps = old_ac.locate_major_mergers()
-    old_ac.make_movie(subtraction_signal, freq, steps=relevant_steps, title='major_mergers', fps=1)
+    labels = []
+    n_clusters = []
+    clustered_signals = []
+    for data in tqdm([shifted_signals, subtraction_signal, sigma_signal, savgol_signal]):
+        # Pre-compute piecewise distance matrix
+        distance_matrix = piecewise_cosine_distance(data)
 
-    # model_dict = {}
-    # final_clusters = []
-    # for filter_method in [None, 'subtraction', 'sigma', 'savgol']:
-    #     data = filter_data(np.asarray(shifted_signals), filter_method, shifted_residual) if filter_method else shifted_signals
-    #     key = filter_method if filter_method else "raw"
-    #
-    #     models = {}
-    #     n_clusters = []
-    #     for n in [5, 10, 15, 20]:
-    #         ac = AgglomerativeClustering(k_neighbors=n)
-    #         ac.fit(shifted_signals)
-    #
-    #         models[n] = ac
-    #         n_clusters.append(len(np.unique(ac.labels_)))
-    #
-    #     model_dict[key] = models
-    #     final_clusters.append(n_clusters)
-    #
-    # final_clusters = np.array(final_clusters)
-    # for i, key in enumerate(['raw', 'subtraction', 'sigma', 'savgol']):
-    #     plt.plot([5, 10, 15, 20], final_clusters[i], marker='o', label=key)
-    #
-    # plt.legend(title='Signal type')
-    # plt.xlabel('Number of neighbors')
-    # plt.ylabel('Final number of clusters')
-    # plt.tight_layout()
-    # plt.show()
+        # Train model
+        ac = AgglomerativeClustering(n_clusters=None, metric='precomputed', linkage='average', distance_threshold=0.3)
+        ac.fit(distance_matrix)
 
+        # Retrieve cluster sizes
+        unique_labels, size = np.unique(ac.labels_, return_counts=True)
 
-    # Train AC algorithm
-    # models = {
-    #     'raw': [],
-    #     'subtraction': [],
-    #     'sigma': [],
-    #     'savgol': []
-    #           }
-    # for filter in [None, 'subtraction', 'sigma', 'savgol']:
-    #     if filter is None:
-    #         data = shifted_signals
-    #         label = 'raw'
-    #     else:
-    #         data = filter_data(np.asarray(shifted_signals), filter, shifted_residual)
-    #         label = filter
-    #
-    #     for n in range(5, 50, 10):
-    #         ac = AgglomerativeClustering(k_neighbors=n, k0_neighbors=1, distance_metric='cosine')
-    #         ac.fit(data)
-    #
-    #         models[label].append(ac)
-    #
-    # with open('models/agglomerative/model_dict.pkl', 'wb') as f:
-    #     pickle.dump(models, f)
+        # Store results
+        labels.append(ac.labels_)
+        n_clusters.append(sum(size > 10))
+        clustered_signals.append(sum(size[size > 10]))
+
+    df = pd.DataFrame(data={'Filter type': ['Raw', 'Subtraction', 'Sigma', 'Savgol'],
+                            'Number of clusters': n_clusters,
+                            'Clustered signal': clustered_signals})

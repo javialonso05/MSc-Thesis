@@ -446,74 +446,73 @@ if __name__ == "__main__":
 
     # Shift signals
     data_info = pd.read_csv('Data/data_info.csv')
-    best_v = data_info['Best velocity'].values
+    best_v = data_info['Best velocity 2'].values
 
     # Create reference signal
-    peaks = [
-        220398.684,  # 13CO(2-1)
-        219949.433,  # SO(5,6-4,5)
-        219560.358  # C18O(2-1)
-    ]
-    peak_loc = [np.argmin(np.abs(f1 - peak)) for peak in peaks]
-
-    reference_signal = np.zeros_like(f1)
-    for peak_location in peak_loc:
-        reference_signal += np.exp(-((np.arange(len(f1)) - peak_location) ** 2 / (2 * 10 ** 2)))
-
-
-    v_diff = []
-    v_list = np.linspace(-5, 5, 1000)
-    for filter_method in [None, 'sigma', 'subtraction', 'savgol']:
-        if filter_method is None:
-            data = spw1_array
-            label = 'raw'
-        else:
-            data = filter_data(spw1_array, filter_type=filter_method, residual=residual_array_spw1)
-            label = f'{filter_method}-filtered'
-
-        v_change = []
-        for i in tqdm(range(len(data)), desc=f'Re-shifting {label} signals'):
-            v = best_v[i]
-            if np.isnan(v):
-                v_change.append(np.nan)
-                continue
-                
-            sim_list = []
-            for dv in v_list:
-                shifted_signal = shift_signal(f1, data[i], v + dv)
-                sim_list.append(cosine_similarity(shifted_signal.reshape(1, -1), reference_signal.reshape(1, -1))[0][0])
-
-            sim_list = np.array(sim_list)
-            v_change.append(v_list[np.argmax(sim_list)])
-
-        v_diff.append(v_change)
-
-    # shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    # shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    # shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
+    # peaks = [
+    #     220398.684,  # 13CO(2-1)
+    #     219949.433,  # SO(5,6-4,5)
+    #     219560.358  # C18O(2-1)
+    # ]
+    # peak_loc = [np.argmin(np.abs(f1 - peak)) for peak in peaks]
     #
-    # subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
+    # reference_signal = np.zeros_like(f1)
+    # for peak_location in peak_loc:
+    #     reference_signal += np.exp(-((np.arange(len(f1)) - peak_location) ** 2 / (2 * 10 ** 2)))
     #
-    # # Find old data index
-    # shifted_mapping = [shifted_mapping[i][:-1] for i in range(len(shifted_mapping))]
-    # old_data_idx = np.load('Data/old_data_idx.npy')
     #
-    # # Perform UMAP reduction with the old data
-    # import umap
+    # v_diff = []
+    # v_list = np.linspace(-5, 5, 1000)
+    # for filter_method in [None, 'sigma', 'subtraction', 'savgol']:
+    #     if filter_method is None:
+    #         data = spw1_array
+    #         label = 'raw'
+    #     else:
+    #         data = filter_data(spw1_array, filter_type=filter_method, residual=residual_array_spw1)
+    #         label = f'{filter_method}-filtered'
     #
-    # up = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit(subtraction_signal[old_data_idx])
-    # old_umap_data = up.transform(subtraction_signal[old_data_idx])
-    # new_umap_data = up.transform(subtraction_signal)
+    #     v_change = []
+    #     for i in tqdm(range(len(data)), desc=f'Re-shifting {label} signals'):
+    #         v = best_v[i]
+    #         if np.isnan(v):
+    #             v_change.append(np.nan)
+    #             continue
     #
-    # fig, ax = plt.subplots(1, 2)
+    #         sim_list = []
+    #         for dv in v_list:
+    #             shifted_signal = shift_signal(f1, data[i], v + dv)
+    #             sim_list.append(cosine_similarity(shifted_signal.reshape(1, -1), reference_signal.reshape(1, -1))[0][0])
     #
-    # ax[0].scatter(old_umap_data[:, 0], old_umap_data[:, 1])
-    # ax[0].set_title('Old UMAP data')
+    #         sim_list = np.array(sim_list)
+    #         v_change.append(v_list[np.argmax(sim_list)])
     #
-    # ax[1].scatter(new_umap_data[:, 0], new_umap_data[:, 1])
-    # ax[1].set_title('New UMAP data')
-    #
-    # plt.tight_layout()
-    # plt.show()
+    #     v_diff.append(v_change)
+
+    shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
+
+    subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
+    sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
+    savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
+
+    # Perform UMAP reduction with the old data
+    import umap
+
+    subtraction_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(subtraction_signal)
+    sigma_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(sigma_signal)
+    savgol_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(savgol_signal)
 
 
+    fig, ax = plt.subplots(1, 3, figsize=(12, 4))
+
+    ax[0].scatter(subtraction_umap[:, 0], subtraction_umap[:, 1])
+    ax[0].set_title("Subtraction-filtered")
+
+    ax[1].scatter(sigma_umap[:, 0], sigma_umap[:, 1])
+    ax[1].set_title("Sigma-filtered")
+
+    ax[2].scatter(savgol_umap[:, 0], savgol_umap[:, 1])
+    ax[2].set_title("SavGol-filtered")
+
+    plt.show()

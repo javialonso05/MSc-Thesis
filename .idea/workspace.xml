@@ -6,6 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="524eedd7-a08c-44e1-ab6e-a7c851805f7c" name="Changes" comment="Data loaded and interpolated">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/data/data_processor.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/data_processor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/features/evaluation.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/features/evaluation.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/models/agglomerative.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/models/agglomerative.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -42,6 +44,7 @@
     &quot;Python.agglomerative.executor&quot;: &quot;Run&quot;,
     &quot;Python.data_loader.executor&quot;: &quot;Run&quot;,
     &quot;Python.data_processor.executor&quot;: &quot;Run&quot;,
+    &quot;Python.evaluation.executor&quot;: &quot;Run&quot;,
     &quot;Python.gmm.executor&quot;: &quot;Run&quot;,
     &quot;Python.kmeans.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
@@ -64,7 +67,7 @@
     <option name="organizationId" value="qb1Ox" />
     <option name="userId" value="EgRQY" />
   </component>
-  <component name="RunManager" selected="Python.agglomerative">
+  <component name="RunManager" selected="Python.evaluation">
     <configuration default="true" type="PythonConfigurationType" factoryName="Python">
       <module name="MSc Thesis" />
       <option name="ENV_FILES" value="" />
@@ -113,30 +116,6 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="data_loader" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="MSc Thesis" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="SDK_NAME" value="Python 3.12 (ICE-CSIC)" />
-      <option name="WORKING_DIRECTORY" value="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
-      <option name="IS_MODULE_SDK" value="false" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/data/data_loader.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="true" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
     <configuration name="data_processor" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="MSc Thesis" />
       <option name="ENV_FILES" value="" />
@@ -153,6 +132,27 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/data/data_processor.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="evaluation" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="MSc Thesis" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="SDK_NAME" value="Python 3.12 (ICE-CSIC)" />
+      <option name="WORKING_DIRECTORY" value="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/features/evaluation.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="true" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -210,19 +210,19 @@
       <method v="2" />
     </configuration>
     <list>
+      <item itemvalue="Python.evaluation" />
       <item itemvalue="Python.agglomerative" />
-      <item itemvalue="Python.data_loader" />
       <item itemvalue="Python.data_processor" />
       <item itemvalue="Python.gmm" />
       <item itemvalue="Python.kmeans" />
     </list>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.evaluation" />
         <item itemvalue="Python.agglomerative" />
-        <item itemvalue="Python.gmm" />
         <item itemvalue="Python.data_processor" />
+        <item itemvalue="Python.gmm" />
         <item itemvalue="Python.kmeans" />
-        <item itemvalue="Python.data_loader" />
       </list>
     </recent_temporary>
   </component>
@@ -263,7 +263,18 @@
       <workItem from="1749583958292" duration="3397000" />
       <workItem from="1749629522737" duration="14953000" />
       <workItem from="1749654488972" duration="106000" />
-      <workItem from="1749715459889" duration="835000" />
+      <workItem from="1749715459889" duration="18882000" />
+      <workItem from="1749799416534" duration="11831000" />
+      <workItem from="1750063387498" duration="24732000" />
+      <workItem from="1750168182961" duration="10312000" />
+      <workItem from="1750410777961" duration="8201000" />
+      <workItem from="1750428716481" duration="4527000" />
+      <workItem from="1750666792195" duration="11281000" />
+      <workItem from="1750943516169" duration="3204000" />
+      <workItem from="1751274705635" duration="17959000" />
+      <workItem from="1751448271426" duration="3392000" />
+      <workItem from="1751640106732" duration="1261000" />
+      <workItem from="1751716942640" duration="9486000" />
     </task>
     <servers />
   </component>
@@ -305,8 +316,9 @@
     <SUITE FILE_PATH="coverage/MSc_Thesis$data_processor.coverage" NAME="data_processor Coverage Results" MODIFIED="1747990655873" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
     <SUITE FILE_PATH="coverage/MSc_Thesis$data_loader.coverage" NAME="data_loader Coverage Results" MODIFIED="1747135969732" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/data" />
     <SUITE FILE_PATH="coverage/kmeans_py$kmeans.coverage" NAME="kmeans Coverage Results" MODIFIED="1748856310596" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
+    <SUITE FILE_PATH="coverage/kmeans_py$evaluation.coverage" NAME="evaluation Coverage Results" MODIFIED="1751716957107" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
     <SUITE FILE_PATH="coverage/MSc_Thesis$kmeans.coverage" NAME="kmeans Coverage Results" MODIFIED="1748421786325" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
-    <SUITE FILE_PATH="coverage/kmeans_py$agglomerative.coverage" NAME="agglomerative Coverage Results" MODIFIED="1749649603276" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
+    <SUITE FILE_PATH="coverage/kmeans_py$agglomerative.coverage" NAME="agglomerative Coverage Results" MODIFIED="1750669152706" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
     <SUITE FILE_PATH="coverage/kmeans_py$data_processor.coverage" NAME="data_processor Coverage Results" MODIFIED="1748861922523" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
   </component>
 </project>

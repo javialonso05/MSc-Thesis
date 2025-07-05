@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 
 
-# TODO: review this function
 def within_cluster_similarity(data: np.ndarray, labels: list,
                               std: bool = False,
                               plot: bool = False,
@@ -73,3 +73,144 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
         return within_cluster_similarity, within_cluster_std
 
     return within_cluster_similarity
+
+
+def piecewise_cosine_distance(data,
+                              window=None,
+                              stride=None,
+                              norm_type='max'):
+    """
+    Custome distance metric that evaluates the cosine distance at several windows
+    :param data:
+    :param window:
+    :param stride:
+    :param norm_type:
+    :return:
+    """
+    # Assign default values
+    if window is None:
+        window = len(data[0]) // 4
+    if stride is None:
+        stride = window // 2
+    # Check inputs
+    if window > data.shape[1]:
+        raise ValueError('Window must be smaller than the signal length')
+
+    # Normalize inputs
+    if norm_type == 'max':
+        data /= np.max(data, axis=1).reshape(-1, 1)
+    elif norm_type == 'int':
+        data /= np.linalg.norm(data, axis=1).reshape(-1, 1)
+    else:
+        raise ValueError(f'norm_type "{norm_type}" not recognized"')
+
+
+    # Start comparison
+    idx = 0
+    distance = []
+    weights = []
+    while idx + window <= data.shape[1]:
+        signals = data[:, idx:idx + window]
+        dist = 1 - cosine_similarity(signals, signals)
+        w0 = np.tile(np.linalg.norm(signals, axis=1), (len(dist), 1))
+
+        distance.append(dist)
+        weights.append(np.minimum(w0, w0.T))
+        idx += stride
+    similarity = np.array(distance)
+    weights = np.array(weights)
+
+    dist = np.zeros_like(dist)
+    for i in range(len(data)):
+        for j in range(len(data)):
+            dist[i, j] = np.average(similarity[:, i, j], weights=weights[:, i, j])
+
+    return dist
+
+
+def test_piecewise_noise_sensitivity(test_signal):
+    """
+
+    :param test_signal:
+    :return:
+    """
+    cosine_dist = []
+    piecewise_dist = []
+    for s in np.linspace(0, np.max(test_signal), 1000):
+        noisy_signal = test_signal + s * np.random.rand(len(test_signal))
+        cosine_dist.append(1 - cosine_similarity(test_signal.reshape(1, -1),
+                                                 noisy_signal.reshape(1, -1))[0][0])
+        piecewise_dist.append(piecewise_cosine_distance(np.vstack((test_signal, noisy_signal)), window=500, stride=250)[0, 1])
+
+    return cosine_dist, piecewise_dist
+
+
+def test_window_size(test_signals):
+    cosine_dist = 1 - cosine_similarity(test_signals[0].reshape(1, -1),
+                                        test_signals[1].reshape(1, -1))[0]
+    piecewise_dist = []
+    for window in np.arange(250, 5001, 50):
+        piecewise_dist.append(piecewise_cosine_distance(test_signals, window=window, stride=250)[0, 1])
+
+    plt.plot(np.arange(250, 5001, 50), piecewise_dist)
+    plt.axhline(cosine_dist, linestyle='--', color='black')
+    plt.xlabel('Window size')
+    plt.ylabel('Distance')
+    plt.show()
+
+    return cosine_dist, piecewise_dist
+
+
+if __name__ == '__main__':
+    from src.data.data_processor import build_array, filter_data
+    from src.features.transformations import shift_signal
+
+    import pickle
+    import pandas as pd
+    from tqdm import tqdm
+
+    # Load raw data
+    interpolated_data = pickle.load(open('Data/Raw/interpolated_data_dict.pkl', 'rb'))
+
+    # Build arrays
+    f0 = interpolated_data['100132']['core1'][0]['Frequency']
+    f1 = interpolated_data['100132']['core1'][1]['Frequency']
+    freq = np.hstack((f0, f1))
+
+    spw1_array, mapping = build_array(interpolated_data, category='Intensity')
+    spw0_array = build_array(interpolated_data, category='Intensity', spw=0, return_log=False)
+    intensity_array = np.hstack((spw0_array, spw1_array))
+
+    residual_array_spw1 = build_array(interpolated_data, category='Residual', return_log=False)
+    residual_array = np.hstack((build_array(interpolated_data, category='Residual', return_log=False, spw=0), residual_array_spw1))
+
+    # Shift signals
+    data_info = pd.read_csv('Data/data_info.csv')
+    best_v = data_info['Best velocity 2'].values
+
+    shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
+
+    # Filter data
+    subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
+
+    # Test functions
+    signals = np.vstack((subtraction_signal[5], subtraction_signal[7]))
+    cosine_dis = 1 - cosine_similarity(signals[0].reshape(1, -1), signals[1].reshape(1, -1))[0]
+    values = []
+    for norm in ['max', 'int']:
+        norm_values = []
+        for window_size in tqdm(range(500, 5000, 500)):
+            stride_length = window_size // 2
+            psim = piecewise_cosine_distance(signals, window=window_size, stride=stride_length, norm_type=norm)
+            norm_values.append(psim[0, 1])
+        values.append(norm_values)
+
+    plt.plot(range(500, 5000, 500), np.array(values).T)
+    plt.axhline(cosine_dis, linestyle='--', color='black')
+    plt.legend(['max', 'int', 'cosine'])
+    plt.xlabel('Window size')
+    plt.ylabel('Distance')
+    plt.show()
+
