@@ -491,32 +491,26 @@ if __name__ == '__main__':
     shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
 
     # Filter data
+    print('Filtering data')
     subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
-    sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
-    savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
+    # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
+    # savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
 
     from src.features.evaluation import piecewise_cosine_distance
-    from sklearn.cluster import AgglomerativeClustering
 
-    labels = []
-    n_clusters = []
-    clustered_signals = []
-    for data in tqdm([shifted_signals, subtraction_signal, sigma_signal, savgol_signal]):
-        # Pre-compute piecewise distance matrix
-        distance_matrix = piecewise_cosine_distance(data)
+    print('Starting computations')
+    label_list = []
+    for norm in [None, 'max', 'int', '13CO']:
+        distance_matrix = piecewise_cosine_distance(subtraction_signal, window=2500, stride=100, norm_type=norm)
 
         # Train model
         ac = AgglomerativeClustering(n_clusters=None, metric='precomputed', linkage='average', distance_threshold=0.3)
         ac.fit(distance_matrix)
 
-        # Retrieve cluster sizes
-        unique_labels, size = np.unique(ac.labels_, return_counts=True)
+        # Print results
+        labels = ac.labels_
+        label_list.append(labels)
+        unique_labels, cluster_sizes = np.unique(labels, return_counts=True)
 
-        # Store results
-        labels.append(ac.labels_)
-        n_clusters.append(sum(size > 10))
-        clustered_signals.append(sum(size[size > 10]))
+        print(f'{sum(cluster_sizes > 10)} clusters - {round(100 * sum(cluster_sizes[cluster_sizes > 10]), 2)}%')
 
-    df = pd.DataFrame(data={'Filter type': ['Raw', 'Subtraction', 'Sigma', 'Savgol'],
-                            'Number of clusters': n_clusters,
-                            'Clustered signal': clustered_signals})

@@ -97,12 +97,15 @@ def piecewise_cosine_distance(data,
         raise ValueError('Window must be smaller than the signal length')
 
     # Normalize inputs
-    if norm_type == 'max':
-        data /= np.max(data, axis=1).reshape(-1, 1)
-    elif norm_type == 'int':
-        data /= np.linalg.norm(data, axis=1).reshape(-1, 1)
-    else:
-        raise ValueError(f'norm_type "{norm_type}" not recognized"')
+    if norm_type is not None:
+        if norm_type == 'max':
+            data /= np.max(data, axis=1).reshape(-1, 1)
+        elif norm_type == 'int':
+            data /= np.linalg.norm(data, axis=1).reshape(-1, 1)
+        elif norm_type == '13CO':
+            data = np.array([data[i] / data[i][16993] for i in range(len(data))])
+        else:
+            raise ValueError(f'norm_type "{norm_type}" not recognized"')
 
 
     # Start comparison
@@ -115,7 +118,8 @@ def piecewise_cosine_distance(data,
         w0 = np.tile(np.linalg.norm(signals, axis=1), (len(dist), 1))
 
         distance.append(dist)
-        weights.append(np.minimum(w0, w0.T))
+        # weights.append(np.minimum(w0, w0.T))
+        weights.append(w0 + w0.T)
         idx += stride
     similarity = np.array(distance)
     weights = np.array(weights)

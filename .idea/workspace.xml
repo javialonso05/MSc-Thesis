@@ -6,7 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="524eedd7-a08c-44e1-ab6e-a7c851805f7c" name="Changes" comment="Data loaded and interpolated">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/data/data_processor.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/data_processor.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/features/evaluation.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/features/evaluation.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/models/agglomerative.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/models/agglomerative.py" afterDir="false" />
     </list>
@@ -67,7 +66,7 @@
     <option name="organizationId" value="qb1Ox" />
     <option name="userId" value="EgRQY" />
   </component>
-  <component name="RunManager" selected="Python.evaluation">
+  <component name="RunManager" selected="Python.agglomerative">
     <configuration default="true" type="PythonConfigurationType" factoryName="Python">
       <module name="MSc Thesis" />
       <option name="ENV_FILES" value="" />
@@ -97,9 +96,6 @@
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
       <option name="SDK_HOME" value="" />
       <option name="SDK_NAME" value="Python 3.12 (ICE-CSIC)" />
       <option name="WORKING_DIRECTORY" value="C:\Users\Javier\Desktop\Programming\MSc Thesis" />
@@ -218,8 +214,8 @@
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.evaluation" />
         <item itemvalue="Python.agglomerative" />
+        <item itemvalue="Python.evaluation" />
         <item itemvalue="Python.data_processor" />
         <item itemvalue="Python.gmm" />
         <item itemvalue="Python.kmeans" />
@@ -274,7 +270,8 @@
       <workItem from="1751274705635" duration="17959000" />
       <workItem from="1751448271426" duration="3392000" />
       <workItem from="1751640106732" duration="1261000" />
-      <workItem from="1751716942640" duration="9486000" />
+      <workItem from="1751716942640" duration="9873000" />
+      <workItem from="1751878705523" duration="2223000" />
     </task>
     <servers />
   </component>
