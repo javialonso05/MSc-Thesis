@@ -394,9 +394,13 @@ def filter_data(data: np.ndarray, filter_type: str, residual = None, **kwargs):
 
 
 if __name__ == "__main__":
+    # raw_dict = load_data('Data/Raw/sources_extracted')
+    # with open("Data/Raw/data_dict.pkl", "wb") as f:
+    #     pickle.dump(raw_dict, f)
+
     # raw_data = pickle.load(open("Data/Raw/data_dict.pkl", "rb"))
     # interpolated_data = interpolate_data(raw_data)
-    #
+
     # with open('Data/Raw/interpolated_data_dict.pkl', 'wb') as f:
     #     pickle.dump(interpolated_data, f)
 
@@ -436,6 +440,7 @@ if __name__ == "__main__":
     f0 = interpolated_data['100132']['core1'][0]['Frequency']
     f1 = interpolated_data['100132']['core1'][1]['Frequency']
     freq = np.hstack((f0, f1))
+    print(min(f1), max(f1))
 
     spw1_array, mapping = build_array(interpolated_data, category='Intensity')
     spw0_array = build_array(interpolated_data, category='Intensity', spw=0, return_log=False)
@@ -447,6 +452,31 @@ if __name__ == "__main__":
     # Shift signals
     data_info = pd.read_csv('Data/data_info.csv')
     best_v = data_info['Best velocity 2'].values
+    
+    # Print reference signal
+    peaks = [
+        220398.684,  # 13CO(2-1)
+        219949.433,  # SO(5,6-4,5)
+        219560.358   # C18O(2-1)
+    ]
+    peak_loc = [np.argmin(np.abs(freq - peak)) for peak in peaks]
+
+    reference_signal = np.zeros_like(freq)
+    for peak_location in peak_loc:
+        reference_signal += np.exp(-((np.arange(len(freq)) - peak_location) ** 2 / (2 * 10 ** 2)))
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(f1, reference_signal/np.max(reference_signal))
+    plt.xlabel('Frequency [MHz]')
+    plt.ylabel('Intensity [Jy]')
+
+    plt.axvline(220398.684, color='black', linestyle='--', label=r'$^{13}$CO(2-1)')
+    plt.axvline(219949.433, color='green', linestyle='--', label=r'SO(5,6-4,5)')
+    plt.axvline(219560.358, color='purple', linestyle='--', label=r'C$^{18}$O(2-1)')
+
+    plt.legend()
+    plt.show()
+
 
     # Create reference signal
     # peaks = [
@@ -488,31 +518,31 @@ if __name__ == "__main__":
     #
     #     v_diff.append(v_change)
 
-    shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
-
-    subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
-    sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
-    savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
-
-    # Perform UMAP reduction with the old data
-    import umap
-
-    subtraction_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(subtraction_signal)
-    sigma_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(sigma_signal)
-    savgol_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(savgol_signal)
-
-
-    fig, ax = plt.subplots(1, 3, figsize=(12, 4))
-
-    ax[0].scatter(subtraction_umap[:, 0], subtraction_umap[:, 1])
-    ax[0].set_title("Subtraction-filtered")
-
-    ax[1].scatter(sigma_umap[:, 0], sigma_umap[:, 1])
-    ax[1].set_title("Sigma-filtered")
-
-    ax[2].scatter(savgol_umap[:, 0], savgol_umap[:, 1])
-    ax[2].set_title("SavGol-filtered")
-
-    plt.show()
+    # shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    # shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    # shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
+    #
+    # subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
+    # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
+    # savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
+    #
+    # # Perform UMAP reduction with the old data
+    # import umap
+    #
+    # subtraction_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(subtraction_signal)
+    # sigma_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(sigma_signal)
+    # savgol_umap = umap.UMAP(n_neighbors=5, metric='cosine', min_dist=0, random_state=42).fit_transform(savgol_signal)
+    #
+    #
+    # fig, ax = plt.subplots(1, 3, figsize=(12, 4))
+    #
+    # ax[0].scatter(subtraction_umap[:, 0], subtraction_umap[:, 1])
+    # ax[0].set_title("Subtraction-filtered")
+    #
+    # ax[1].scatter(sigma_umap[:, 0], sigma_umap[:, 1])
+    # ax[1].set_title("Sigma-filtered")
+    #
+    # ax[2].scatter(savgol_umap[:, 0], savgol_umap[:, 1])
+    # ax[2].set_title("SavGol-filtered")
+    #
+    # plt.show()

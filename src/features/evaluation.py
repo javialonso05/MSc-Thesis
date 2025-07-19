@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+from scipy.optimize import linear_sum_assignment
+from sklearn.metrics import confusion_matrix
+from tqdm import tqdm
 
 
 def within_cluster_similarity(data: np.ndarray, labels: list,
@@ -109,27 +112,34 @@ def piecewise_cosine_distance(data,
 
 
     # Start comparison
-    idx = 0
-    distance = []
-    weights = []
-    while idx + window <= data.shape[1]:
+    distance = None
+    weights = None
+    for idx in tqdm(range(0, data.shape[1] - window, stride)):
         signals = data[:, idx:idx + window]
         dist = 1 - cosine_similarity(signals, signals)
         w0 = np.tile(np.linalg.norm(signals, axis=1), (len(dist), 1))
 
-        distance.append(dist)
-        # weights.append(np.minimum(w0, w0.T))
-        weights.append(w0 + w0.T)
-        idx += stride
-    similarity = np.array(distance)
-    weights = np.array(weights)
+        # distance.append(dist)
+        # # weights.append(np.minimum(w0, w0.T))
+        # weights.append(w0 + w0.T)
 
-    dist = np.zeros_like(dist)
-    for i in range(len(data)):
-        for j in range(len(data)):
-            dist[i, j] = np.average(similarity[:, i, j], weights=weights[:, i, j])
+        if distance is None:
+            distance = dist * (w0 + w0.T)
+            weights = w0 + w0.T
+        else:
+            distance += dist * (w0 + w0.T)
+            weights += w0 + w0.T
 
-    return dist
+    distance /= weights
+    # similarity = np.array(distance)
+    # weights = np.array(weights)
+    #
+    # dist = np.zeros_like(dist)
+    # for i in range(len(data)):
+    #     for j in range(len(data)):
+    #         dist[i, j] = np.average(similarity[:, i, j], weights=weights[:, i, j])
+
+    return distance
 
 
 def test_piecewise_noise_sensitivity(test_signal):
@@ -163,6 +173,48 @@ def test_window_size(test_signals):
     plt.show()
 
     return cosine_dist, piecewise_dist
+
+
+def clustering_overlap_score(labels1, labels2):
+    """
+    Computes the best label alignment between two clustering results
+    and returns the fraction of points that are assigned the same label.
+    """
+    labels1 = np.array(labels1)
+    labels2 = np.array(labels2)
+    assert labels1.shape == labels2.shape, "Label arrays must be the same length"
+    # Compute the confusion matrix
+    cm = confusion_matrix(labels1, labels2)
+    # Use the Hungarian algorithm to find the best alignment
+    row_ind, col_ind = linear_sum_assignment(-cm)  # Maximize total matches
+    # Total correctly matched labels
+    matched = cm[row_ind, col_ind].sum()
+    return matched / len(labels1)
+
+
+def overlapping_indices(labels1, labels2):
+    """
+    Returns the indices where the optimally permuted labels2 matches labels1.
+    """
+    labels1 = np.array(labels1)
+    labels2 = np.array(labels2)
+    assert labels1.shape == labels2.shape, "Label arrays must be the same length"
+    # Compute the confusion matrix
+    cm = confusion_matrix(labels1, labels2)
+
+    # Find the optimal assignment
+    row_ind, col_ind = linear_sum_assignment(-cm)
+
+    # Build a mapping from labels2 to labels1
+    label_map = {col: row for row, col in zip(row_ind, col_ind)}
+
+    # Apply the mapping to labels2
+    aligned_labels2 = np.array([label_map[label] for label in labels2])
+
+    # Find indices where aligned labels match
+    overlap_idx = np.where(aligned_labels2 == labels1)[0]
+
+    return overlap_idx.tolist()
 
 
 if __name__ == '__main__':

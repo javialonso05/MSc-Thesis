@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial import distance_matrix
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score, confusion_matrix
 from sklearn.metrics.pairwise import cosine_similarity
@@ -468,49 +469,61 @@ if __name__ == '__main__':
 
 
     # Load raw data
-    interpolated_data = pickle.load(open('Data/Raw/interpolated_data_dict.pkl', 'rb'))
+    freq = np.load('Data/frequencies.npy')
+    intensity_array = np.load('Data/intensity_array.npy')
+    residual_array = np.load('Data/residual_array.npy')
 
-    # Build arrays
-    f0 = interpolated_data['100132']['core1'][0]['Frequency']
-    f1 = interpolated_data['100132']['core1'][1]['Frequency']
-    freq = np.hstack((f0, f1))
-
-    spw1_array, mapping = build_array(interpolated_data, category='Intensity')
-    spw0_array = build_array(interpolated_data, category='Intensity', spw=0, return_log=False)
-    intensity_array = np.hstack((spw0_array, spw1_array))
-
-    residual_array_spw1 = build_array(interpolated_data, category='Residual', return_log=False)
-    residual_array = np.hstack((build_array(interpolated_data, category='Residual', return_log=False, spw=0), residual_array_spw1))
-
-    # Shift signals
     data_info = pd.read_csv('Data/data_info.csv')
     best_v = data_info['Best velocity 2'].values
 
+    # Shift data
     shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
     shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
 
     # Filter data
-    print('Filtering data')
     subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
     # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
     # savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
 
-    from src.features.evaluation import piecewise_cosine_distance
+    # from src.features.evaluation import piecewise_cosine_distance
+    #
+    # distance_matrix = piecewise_cosine_distance(subtraction_signal, window=2500, stride=100, norm_type='max')
+    # np.save('Data/max_distance_matrix.npy', distance_matrix)
 
-    print('Starting computations')
-    label_list = []
-    for norm in [None, 'max', 'int', '13CO']:
-        distance_matrix = piecewise_cosine_distance(subtraction_signal, window=2500, stride=100, norm_type=norm)
+    # Peaks to mask - source: CDMS
+    major_peaks = np.array([
+        218222.1920,  # H2CO
+        218475.6320,  # H2CO
+        218760.0660,  # H2CO
+        218441.3235,  # SiC2 ?
+        219560.3580,  # C18O
+        220398.6840,  # SO
+        219949.4330,  # 13CO
+    ])
 
-        # Train model
-        ac = AgglomerativeClustering(n_clusters=None, metric='precomputed', linkage='average', distance_threshold=0.3)
-        ac.fit(distance_matrix)
+    idx = [np.argmin(np.abs(freq - major_peaks[i])) for i in range(len(major_peaks))]
+    mask = np.zeros(subtraction_signal.shape[1], dtype=bool)
+    for i in range(len(idx)):
+        mask[idx[i] - 25: idx[i] + 25] = True
 
-        # Print results
-        labels = ac.labels_
-        label_list.append(labels)
-        unique_labels, cluster_sizes = np.unique(labels, return_counts=True)
+    # Load distance matrix
+    CO_mask = np.array([True if signal[16993] > 0 else False for signal in subtraction_signal])
+    normalized_signals = subtraction_signal[CO_mask] / subtraction_signal[CO_mask][:, 16993].reshape(-1, 1)
 
-        print(f'{sum(cluster_sizes > 10)} clusters - {round(100 * sum(cluster_sizes[cluster_sizes > 10]), 2)}%')
+    # Train model with the full signals
+    ac_complete = AgglomerativeClustering(n_clusters=None, metric='precomputed', linkage='average', distance_threshold=0.3)
+    ac_complete.fit(np.load('Data/13CO_distance_matrix.npy'))
+
+    # Mask out the major peaks
+    masked_signals = np.zeros_like(normalized_signals)
+    for i in range(len(masked_signals)):
+        masked_signals[i] = normalized_signals[i]
+        masked_signals[i][mask] = 0
+
+    # Visualize masked data
+    import umap
+    umap_data = umap.UMAP(n_neighbors=5, min_dist=0, metric='cosine', n_components=2, random_state=42).fit_transform(masked_signals)
+
+    plt.scatter(umap_data[:, 0], umap_data[:, 1])
+    plt.show()
 

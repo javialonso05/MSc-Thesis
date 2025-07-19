@@ -52,7 +52,7 @@ def extract_signals(base_dir):
 
 if __name__ == '__main__':
     # Define the base directory
-    base_directory = 'Data/sources'
+    base_directory = 'Data/Raw/sources'
     extract_signals(base_directory)
     n = 0
 
