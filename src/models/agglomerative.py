@@ -1,8 +1,7 @@
 import numpy as np
-from scipy.spatial import distance_matrix
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score, confusion_matrix
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics.pairwise import cosine_similarity, cosine_distances
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from tqdm import tqdm
 
@@ -377,7 +376,6 @@ class CustomAgglomerativeClustering:
         return steps
 
 
-
 def compare_clusterings(list_of_labels: list, plot: bool = True, legend: list = None):
     """
     Compare the output of several GDL clusterings
@@ -444,86 +442,57 @@ def check_reclustering(signals, centroids, true_labels, pred_labels, cluster):
 
 
 if __name__ == '__main__':
-    from src.data.data_processor import build_array, filter_data
+    from src.data.data_processor import filter_data
     from src.features.transformations import shift_signal
 
-    from scipy.optimize import linear_sum_assignment
     from sklearn.metrics import adjusted_rand_score
-    from sklearn.datasets import make_blobs
     import matplotlib.pyplot as plt
     import pandas as pd
-    import pickle
-
-    # Test
-    # data, labels = make_blobs(1000, centers=10, random_state=42)
-    #
-    # new_ac = AgglomerativeClustering(k0_neighbors=1, distance_metric='euclidean')
-    # new_ac.fit(data)
-    #
-    # split_linkage, mappings = new_ac.get_cluster_linkage()
-    #
-    # for i in range(max(new_ac.labels_) + 1):
-    #     dendrogram(split_linkage[0])
-    #     plt.title('Dendrogram for cluster {i}'.format(i=i))
-    #     plt.show()
-
 
     # Load raw data
-    freq = np.load('Data/frequencies.npy')
+    freq:np.ndarray = np.load('Data/frequencies.npy')
     intensity_array = np.load('Data/intensity_array.npy')
     residual_array = np.load('Data/residual_array.npy')
 
-    data_info = pd.read_csv('Data/data_info.csv')
+    data_info: pd.DataFrame = pd.read_csv('Data/data_info.csv')
     best_v = data_info['Best velocity 2'].values
 
     # Shift data
-    shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    # pyrefly: ignore
+    shifted_signals: np.ndarray = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    # pyrefly: ignore
+    shifted_residual: np.ndarray = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
 
     # Filter data
     subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
-    # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifted_residual)
+    # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifte   d_residual)
     # savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
 
-    # from src.features.evaluation import piecewise_cosine_distance
-    #
-    # distance_matrix = piecewise_cosine_distance(subtraction_signal, window=2500, stride=100, norm_type='max')
-    # np.save('Data/max_distance_matrix.npy', distance_matrix)
+    from src.features.evaluation import piecewise_cosine_distance
+    # dist_matrix = cosine_distances(subtraction_signal, subtraction_signal)
+    
+    dist_matrix = piecewise_cosine_distance(subtraction_signal, window=2500, stride=200)
+    print(f"Distance matrix shape: {dist_matrix.shape}")
 
-    # Peaks to mask - source: CDMS
-    major_peaks = np.array([
-        218222.1920,  # H2CO
-        218475.6320,  # H2CO
-        218760.0660,  # H2CO
-        218441.3235,  # SiC2 ?
-        219560.3580,  # C18O
-        220398.6840,  # SO
-        219949.4330,  # 13CO
-    ])
-
-    idx = [np.argmin(np.abs(freq - major_peaks[i])) for i in range(len(major_peaks))]
-    mask = np.zeros(subtraction_signal.shape[1], dtype=bool)
-    for i in range(len(idx)):
-        mask[idx[i] - 25: idx[i] + 25] = True
-
-    # Load distance matrix
-    CO_mask = np.array([True if signal[16993] > 0 else False for signal in subtraction_signal])
-    normalized_signals = subtraction_signal[CO_mask] / subtraction_signal[CO_mask][:, 16993].reshape(-1, 1)
-
-    # Train model with the full signals
-    ac_complete = AgglomerativeClustering(n_clusters=None, metric='precomputed', linkage='average', distance_threshold=0.3)
-    ac_complete.fit(np.load('Data/13CO_distance_matrix.npy'))
-
-    # Mask out the major peaks
-    masked_signals = np.zeros_like(normalized_signals)
-    for i in range(len(masked_signals)):
-        masked_signals[i] = normalized_signals[i]
-        masked_signals[i][mask] = 0
-
-    # Visualize masked data
-    import umap
-    umap_data = umap.UMAP(n_neighbors=5, min_dist=0, metric='cosine', n_components=2, random_state=42).fit_transform(masked_signals)
-
-    plt.scatter(umap_data[:, 0], umap_data[:, 1])
-    plt.show()
-
+    # Train complete agglomerative clustering
+    ac_complete: AgglomerativeClustering = AgglomerativeClustering(
+        n_clusters=None, 
+        metric='precomputed', 
+        linkage='complete', 
+        distance_threshold=0.3)
+    ac_complete.fit(dist_matrix)
+    
+    # Train average agglomerative clustering
+    ac_average: AgglomerativeClustering = AgglomerativeClustering(
+        n_clusters=None, 
+        metric='precomputed', 
+        linkage='average', 
+        distance_threshold=0.3)
+    ac_average.fit(dist_matrix)
+    
+    # Save label assignments
+    labels_complete = ac_complete.labels_
+    labels_average = ac_average.labels_
+    
+    np.save('models/agglomerative/piecewise_complete_labels.npy', labels_complete)
+    np.save('models/agglomerative/piecewise_average_labels.npy', labels_average)

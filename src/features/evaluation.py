@@ -114,7 +114,7 @@ def piecewise_cosine_distance(data,
     # Start comparison
     distance = None
     weights = None
-    for idx in tqdm(range(0, data.shape[1] - window, stride)):
+    for idx in tqdm(range(0, data.shape[1] - window, stride), desc='Calculating piecewise cosine distance'):
         signals = data[:, idx:idx + window]
         dist = 1 - cosine_similarity(signals, signals)
         w0 = np.tile(np.linalg.norm(signals, axis=1), (len(dist), 1))

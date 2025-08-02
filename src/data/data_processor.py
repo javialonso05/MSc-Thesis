@@ -9,6 +9,166 @@ from sklearn.metrics.pairwise import cosine_similarity
 from src.features.transformations import shift_signal, transform_signal
 
 
+class RedShiftCorrector:
+    def __init__(self,
+                 frequency: np.ndarray,
+                 reference_signal: np.ndarray = None,
+                 tolerance: float = 0.5,
+                 max_velocity: float = 200.0):
+        
+        self.frequency = frequency.flatten()
+        self.tol = tolerance
+        self.max_v = max_velocity
+        self.results = None
+
+        # Create reference signal
+        if reference_signal is None:
+                peaks = [
+                    220398.684,  # 13CO(2-1)
+                    219949.433,  # SO(5,6-4,5)
+                    219560.358   # C18O(2-1)
+                ]
+                peak_loc = [np.argmin(np.abs(self.frequency - peak)) for peak in peaks]
+
+                reference_signal = np.zeros_like(self.frequency)
+                for peak_location in peak_loc:
+                    reference_signal += np.exp(-((np.arange(len(self.frequency)) - peak_location) ** 2 / (2 * 10 ** 2)))
+        self.reference_signal = reference_signal.reshape(1, -1)
+    
+    def _calculate_velocity(self,
+                            signal_array: np.ndarray,
+                            dv_0: float = 1.0,
+                            dv_1: float = 0.01):
+        """
+        Calculate the velocity of each source
+        :param signal_array - Array with the signals to be shifted
+        :param dv_0 - Velocity increments for the broad alignment
+        """
+        
+        
+        # Initialize velocity list
+        signal_velocities = []
+        if signal_array.shape[1] == 20000:
+            signal_array = signal_array[:, 10000:]
+        
+        # Start iteration
+        for i in tqdm(range(len(signal_array)), desc='Shifting signals'):
+            signal = np.array(signal_array[i])
+            signal[signal < 0] = 0  # Remove negative values
+
+            # Find broad alignment
+            max_sim = -1
+            for v in np.arange(-250, 251, dv_0):
+                shifted_signal = shift_signal(self.frequency, signal, v)
+                similarity = cosine_similarity(shifted_signal.reshape(1, -1),
+                                               self.reference_signal)
+
+                if similarity > max_sim:
+                    max_sim = similarity
+                    best_vel = v
+
+            # Fine-tune alignment
+            for v in np.arange(best_vel - 1, best_vel + 1 + dv_1, dv_1):
+                shifted_signal = shift_signal(self.frequency, signal, v)
+                similarity = cosine_similarity(shifted_signal.reshape(1, -1),
+                                               self.reference_signal)
+                
+                if similarity > max_sim:
+                    max_sim = similarity
+                    best_v = v
+
+            signal_velocities.append(best_v)
+
+        return signal_velocities
+    
+    def fit(self,
+            raw_data: np.ndarray,
+            mapping: list,
+            residual: np.ndarray = None,
+            filtering: list = ['None', 'subtraction', 'sigma']) -> pd.DataFrame:
+        """
+        Find the velocities of all sources according to a majority-voting scheme
+
+        Args:
+            raw_data (np.ndarray): array with the interpolated raw signals
+            residual (np.ndarray): array with each signals residual. Defaults to None.
+            filtering (list): List of filtering methods to be used. Defaults to [None, 'subtraction', 'sigma'].
+
+        Raises:
+            ValueError: Residual is required if "subtraction" or "sigma" are in "filtering"
+            ValueError: Signal and residual data shape do not match
+            ValueError: Unknown filtering method. Accepted methods are "subtraction", "sigma" and "savgol"
+            ValueError: Length of data array and mapping do not match
+            Warning: Majority voting can lead to errors if an even number of methods is used.
+
+        Returns:
+            pd.DataFrame: DataFrame with each signal's data, the velocity for each method and the best velocity.
+        """
+
+        # Check inputs
+        if residual is None and ("subtraction" in filtering or "sigma" in filtering):
+            raise ValueError('Residual is required if "subtraction" or "sigma" are in "filtering"')
+        if residual is not None:
+            if raw_data.shape != residual.shape:
+                raise ValueError('Signal and residual data shape do not match')
+        if len(filtering) % 2 == 0:
+            raise Warning('Majority voting can lead to errors if an even number of methods is used.')
+        if len(mapping) != len(raw_data):
+            raise ValueError('Length of data array and mapping do not match')
+        
+        # Create output dataframe
+        results = {
+            'Source': [],
+            'Core': [],
+            'Best_velocity': []
+        }
+        
+        # Find the velocity for each filtering method
+        velocity_matrix = []
+        for method in filtering:
+            print(f'Filtering method: {method}')
+            # Calculate velocity
+            if method == 'None':
+                signal_data = raw_data
+            else:
+                signal_data = filter_data(data=raw_data, filter_type=method, residual=residual)
+            velocity_list = self._calculate_velocity(signal_data)
+            
+            # Define tag\
+            tag = f'{method}_velocity'
+            
+            # Store results
+            results[tag] = velocity_list
+            velocity_matrix.append(velocity_list)
+        
+        # Find best velocity according to majority voting
+        velocity_matrix = np.array(velocity_matrix).T
+        for i, row in enumerate(velocity_matrix):
+            # Count how many velocities are within self.tol of each other
+            counts = []
+            for v in row:
+                count = np.sum(np.abs(row - v) <= self.tol)
+                counts.append(count)
+            
+            # Pick the velocity with the highest count (most common within tolerance)
+            best_idx = np.argmax(counts)
+            best_v = row[best_idx]
+            
+            # If counts = 0, best_v will be NaN
+            if np.all(counts == 0):
+                results['Best_velocity'].append(np.nan)
+            else:
+                results['Best_velocity'].append(best_v)
+            
+            # Append mapping data
+            results['Source'].append(mapping[i][0])
+            results['Core'].append(int(mapping[i][1][4:]))
+        
+        # Convert to dataframe and return
+        results = pd.DataFrame(results)
+        self.results = results
+        return results
+
 # Loading data functions
 def load_data(base_dir: str):
     """
@@ -200,7 +360,7 @@ def red_shift_correction(frequency: np.ndarray, signal_array: np.ndarray, refere
     :param plot_reference: flag for plotting the reference signal
     :param v_list: list with the velocities to be searched in the broad search phase
     :param width: width of the peaks in the reference signal
-    :return: corrected signals and velocity list
+    :return: velocity list
     """
 
     # Create the reference signal if it is not passed as an input
@@ -362,6 +522,8 @@ def filter_data(data: np.ndarray, filter_type: str, residual = None, **kwargs):
     :param kwargs: additional arguments passed to the filter function
     :return: filtered data
     """
+    if filter_type is None:
+        return data
 
     if filter_type == 'sigma':
         # Check residual
