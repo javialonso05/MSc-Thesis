@@ -3,20 +3,27 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-def plot_cluster_distributions(data: pd.DataFrame,
-                               labels: np.ndarray,
+def plot_cluster_distributions(core_data: pd.DataFrame,
+                               core_info: pd.DataFrame,
                                variable: str,
                                min_cluster_size: int = 10,
                                cluster_labels: list = None,
                                ):
     """
-    Plot the distribution of physical properties for clusters in the dataset as boxplots
-    :param data: DataFrame containing the cluster data
-    :param variable: List of columns to plot. If None, all columns will be used
-    :param min_cluster_size: Minimum size of clusters to be included in the plot
-    :param cluster_labels: List of cluster labels to filter the data. None if min_cluster_size is specified
-    :return: None
+    Plot boxplots for a given property and the relevant clusters
+    Args:
+        core_data (pd.DataFrame): physical properties of the cores
+        core_info (pd.DataFrame): label assignment and core info (source + coreID)
+        variable (str): variable from core_data to test
+        min_cluster_size (int, optional): Minimum cluster size to consider. Defaults to 10.
+        cluster_labels (list, optional): Clusters to consider. Defaults to None.
+
+    Raises:
+        ValueError: {variable} not in core_data
+        ValueError: Either min_cluster_size or cluster_labels must be specified.
     """
+    
+    labels = core_info['Labels'].values
     
     # Check inputs    
     if cluster_labels is None:  # Clusters to plot
@@ -30,24 +37,41 @@ def plot_cluster_distributions(data: pd.DataFrame,
             raise ValueError("Either min_cluster_size or cluster_labels must be specified.")
         
     
-    if variable not in data.columns:
-        raise ValueError(f"Variable '{variable}' not found in the DataFrame.")
+    if variable not in core_data.columns:
+        raise ValueError(f"'{variable}' not found in the DataFrame.")
     
-    # Make box plots for each cluster for the given variable
+    import warnings
+
+    # Suppress all warnings
+    warnings.filterwarnings("ignore")
     
-    # Filter data for the specified clusters
-    idx_mask = [i for i, label in enumerate(labels) if label in cluster_labels]
-    filtered_data = data.iloc[idx_mask]
+    # Find mapping: core_info -> core_data
+    mapping = []
+    for i in range(len(core_info)):
+        idx = core_info[(core_info['Source'].iloc[i] == core_data['CLUMP']) & (core_info['Core'].iloc[i] == core_data['ID'])].index
+        if len(idx) > 0:
+            mapping.append([i, idx[0]])
     
-    print(filtered_data.head(5))
+    # Find mask
+    data_mask = []
+    info_mask = []
+    for i in range(len(mapping)):
+        info_idx, data_idx = mapping[i]
+        
+        if core_info['Labels'].iloc[info_idx] in cluster_labels:
+            data_mask.append(data_idx)
+            info_mask.append(info_idx)
     
-    # Create boxplot
-    ax = filtered_data.boxplot(column=variable, by='Cluster', figsize=(10, 6))
-    ax.set_xlabel('Cluster')
-    ax.set_ylabel(variable)
+    # Select data
+    core_data = core_data.iloc[data_mask]
+    core_info = core_info.iloc[info_mask]
     
-    # Show plot
-    plt.suptitle('')
+    # Plot properties
+    df = pd.DataFrame()
+    df[variable] = core_data[variable]
+    df['Labels'] = core_info['Labels']
+    df.boxplot(column=variable, by='Labels')
+    plt.ylabel(variable)
     plt.show()
 
 
