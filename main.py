@@ -15,5 +15,3 @@ subtraction_signal = np.load('Data/subtraction_shifted_array.npy')
 
 data_info = pd.read_csv('Data/data_info.csv')
 velocity_info = pd.read_csv('Data/velocity_info.csv')
-
-
