@@ -29,15 +29,29 @@ velocity_info = pd.read_csv('Data/velocity_info.csv')
 labels, sizes = np.unique(velocity_info['CC_label'], return_counts=True)
 relevant_labels = [labels[i] for i in range(len(labels)) if sizes[i] >= 20]
 
-# Test for differences
+# Define dataframe
 variables = ['Mcore', 'Tcore', 'Lclump']
 df = data_info[variables]
-df['Label'] = velocity_info['CC_label']
+
+idx = []
+labels = []
+for i in range(len(data_info)):
+    source = data_info['CLUMP'].iloc[i]
+    core = data_info['ID'].iloc[i]
+    
+    index = velocity_info[(velocity_info['Source'] == source) & (velocity_info['Core'] == core)].index.to_list()
+    if len(index) > 0:
+        idx.append(index[0])
+        labels.append(velocity_info['CC_label'].iloc[index[0]])
+
+df = df.iloc[idx]
+df['Label'] = labels
 
 # Test analyzer
 from src.analysis.cluster_analysis import Analyzer
 analyzer = Analyzer(minimum_samples=20)
-results, posthoc_results = analyzer.test_median_difference(df)
+results = analyzer.test_median_difference(df)
+posthoc_results = analyzer.posthoc_test(df, results)
 
 
 print('\nPosthoc results:')
@@ -49,15 +63,10 @@ for var in posthoc_results.keys():
     
     sizes = [len(posthoc_results[var][group]) for group in groups]
     print(f'\tSizes: {sizes}')
+    
+analyzer.visualize_results(data=df, posthoc_results=posthoc_results,
+                           spectra=subtraction_signal, frequency=freq)
 
-
-
-print('\n')
-for var in posthoc_results.keys():
-    print(f'{var}:')
-    for group in posthoc_results[var].keys():
-        if len(posthoc_results[var][group]) < 5:
-            print(f'\nGroup {group}: {posthoc_results[var][group]}')
-        else:
-            print(f'\nGroup {group}: {posthoc_results[var][group][:5]}...')
         
+# TODO: check splits with other labelling assignments
+# TODO: correlate observed properties to the spectra

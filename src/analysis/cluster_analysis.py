@@ -227,7 +227,7 @@ class Analyzer:
                 
     def test_median_difference(self,
                                data: pd.DataFrame,
-                               variables: list[str] = None) -> tuple[dict[str: tuple[float, float, float]], dict[str: list[float]]]:
+                               variables: list[str] = None) -> dict:
         """
         Test whether the difference in the median of variables is statistically significant
         
@@ -238,21 +238,14 @@ class Analyzer:
         Returns:
             tuple[dict, dict]: Results of the ANOVA and posthoc tests
         """
-        from scipy.stats import ttest_ind
-        from scipy.stats import mannwhitneyu
-
         
         if variables is None:
             variables = [col for col in data.columns if col != 'Label']
         
         normality = self.test_normality(data=data, variables=variables, plot_results=False)
         
-        unique_labels, sizes = np.unique(data['Label'], return_counts=True)
-        labels = [unique_labels[i] for i in range(len(unique_labels)) if sizes[i] >= self.min_n]
-        
         # Initialize variables
         results = {}
-        posthoc_results = {}
 
         # Compare the distributions
         print('-' * 25)
@@ -275,10 +268,37 @@ class Analyzer:
             
             # Report results
             print(f'{var}:\t{round(p_value, 5)}')
-            
-            # Perform post-hoc tests
+                
+        print('-' * 25)
+        
+        return results
+
+    def posthoc_test(self,
+                     data: pd.DataFrame,
+                     results: dict) -> dict:
+        """_summary_
+
+        Args:
+            data (pd.Dataframe): physical properties of the cores and labeling assignment
+            results (dict[variable: (test, score, p_value)]): output from self.test_median_difference
+
+        Returns:
+            dict: results of the posthoc test
+        """
+        from scipy.stats import ttest_ind
+        from scipy.stats import mannwhitneyu
+        
+        # Retrieve labels of interest
+        unique_labels, sizes = np.unique(data['Label'], return_counts=True)
+        labels = [unique_labels[i] for i in range(len(unique_labels)) if sizes[i] >= self.min_n]
+        
+        # Perform post-hoc tests
+        posthoc_results = {}
+        for var in results.keys():
             n = 1
+            test, _, p_value = results[var]
             independence = {}
+            
             if p_value > 0.05:
                 # All distributions come from the same underlying distribution
                 independence[0] = []
@@ -287,9 +307,9 @@ class Analyzer:
                     df_1 = data[data['Label'] != label]
                     
                     if test == 'anova':  # Distribution is normal
-                        stat, p_value = ttest_ind(df_0[var], df_1[var], nan_policy='propagate')
+                        _, p_value = ttest_ind(df_0[var], df_1[var], nan_policy='propagate')
                     else:
-                        stat, p_value = mannwhitneyu(df_0[var], df_1[var], alternative='two-sided')
+                        _, p_value = mannwhitneyu(df_0[var], df_1[var], alternative='two-sided')
                     
                     if p_value <= 0.05:
                         independence[n] = [label]
@@ -325,150 +345,74 @@ class Analyzer:
                             n += 1
                     
             posthoc_results[var] = independence
+        
+        return posthoc_results
+
+    def visualize_results(self,
+                          data: pd.DataFrame,
+                          posthoc_results: dict,
+                          spectra: np.ndarray,
+                          frequency: np.ndarray,
+                          variables: list[str] = None) -> None:
+        """
+        Visualize the distributions identified by the posthoc test for the given variables and their corresponding spectra
+
+        Args:
+            data (pd.DataFrame): physical properties of the cores and their label assignment.
+            posthoc_results (dict): output from self.posthoc_test.
+            spectra (np.ndarray): intensity spectra for each of the signals.
+            frequency (np.ndarray): frequency channels corresponding to spectra.
+            variables (list[str], optional): list of variables to plot. If None, all variables will be plotted.
+        """
+        import seaborn as sns
+        
+        # Define variables
+        if variables is None:
+            variables = posthoc_results.keys()
+        
+        # Iterate through variables
+        for var in variables:
+            # Retrieve groups
+            groups = posthoc_results[var].keys()
+            
+            # Initialize density figure parameters
+            fig0, ax0 = plt.subplots(figsize=(8, 5))  # Figure for the density distributions
+            cmap = plt.get_cmap('tab10')
+            
+            # Initialize second figure
+            fig, ax = plt.subplots(len(groups), 1, sharex=True, figsize=(10, 4 * len(groups)))
                 
-        print('-' * 25)
-        
-        return results, posthoc_results
-
-
-
-def kruskal_wallis_test(data: pd.DataFrame,
-                        min_group_size: int = 20) -> dict:
-    """
-    Apply Kruskal Wallis H-test (non-parametric ANOVA) to all columns in the dataframe other than label
-
-    Args:
-        data (pd.DataFrame): The physical properties to test and the clustering assignment
-        min_group_size (int): Minimum number of samples required in a group to include it in the test.
-
-
-    Returns:
-        dict: {column: (statistic, p-value)} for each tested column
-    """
-    from scipy.stats import kruskal
-    
-    results = {}
-    grouped = data.groupby('Label')
-    # Filter groups by size
-    valid_groups = {name: group for name, group in grouped if len(group) >= min_group_size}
-    
-    for col in data.columns:
-        # Exclude 'Label'
-        if col == 'Label':
-            continue
-        
-        # Gather values for each group
-        groups = [group[col].dropna().values for group in valid_groups.values()]
-        if all(len(g) > 0 for g in groups):
-            stat, p = kruskal(*groups)
-            results[col] = (stat, p)
-        else:
-            results[col] = (np.nan, np.nan)
-    return results
-    
-    
-
-
-def plot_cluster_distributions(core_data: pd.DataFrame,
-                               core_info: pd.DataFrame,
-                               variable: str,
-                               min_cluster_size: int = 10,
-                               cluster_labels: list = None,
-                               ):
-    """
-    Plot boxplots for a given property and the relevant clusters
-    Args:
-        core_data (pd.DataFrame): physical properties of the cores
-        core_info (pd.DataFrame): label assignment and core info (source + coreID)
-        variable (str): variable from core_data to test
-        min_cluster_size (int, optional): Minimum cluster size to consider. Defaults to 10.
-        cluster_labels (list, optional): Clusters to consider. Defaults to None.
-
-    Raises:
-        ValueError: {variable} not in core_data
-        ValueError: Either min_cluster_size or cluster_labels must be specified.
-    """
-    
-    labels = core_info['Labels'].values
-    
-    # Check inputs    
-    if cluster_labels is None:  # Clusters to plot
-        cluster_labels = []
-        if min_cluster_size is not None:
-            unique_labels, counts = np.unique(labels, return_counts=True)
-            for label, count in zip(unique_labels, counts):
-                if count >= min_cluster_size:
-                    cluster_labels.append(label)
-        else:
-            raise ValueError("Either min_cluster_size or cluster_labels must be specified.")
-        
-    
-    if variable not in core_data.columns:
-        raise ValueError(f"'{variable}' not found in the DataFrame.")
-    
-    import warnings
-
-    # Suppress all warnings
-    warnings.filterwarnings("ignore")
-    
-    # Find mapping: core_info -> core_data
-    mapping = []
-    for i in range(len(core_info)):
-        idx = core_info[(core_info['Source'].iloc[i] == core_data['CLUMP']) & (core_info['Core'].iloc[i] == core_data['ID'])].index
-        if len(idx) > 0:
-            mapping.append([i, idx[0]])
-    
-    # Find mask
-    data_mask = []
-    info_mask = []
-    for i in range(len(mapping)):
-        info_idx, data_idx = mapping[i]
-        
-        if core_info['Labels'].iloc[info_idx] in cluster_labels:
-            data_mask.append(data_idx)
-            info_mask.append(info_idx)
-    
-    # Select data
-    core_data = core_data.iloc[data_mask]
-    core_info = core_info.iloc[info_mask]
-    
-    # Plot properties
-    df = pd.DataFrame()
-    df[variable] = core_data[variable]
-    df['Labels'] = core_info['Labels']
-    df.boxplot(column=variable, by='Labels')
-    plt.ylabel(variable)
-    plt.show()
-
-
-def find_mapping(signal_data: np.ndarray, 
-                 core_data: pd.DataFrame,
-                 core_mapping: dict) -> list:
-    """
-    Find the mapping of signal indices to data values.
-    :param data: Array with signal data
-    :param core_mapping: Mapping from signal indices to source and core tags
-    :return: List of mapped cluster labels
-    """
-    
-    mapping = []
-    for i in range(len(signal_data)):
-        # Extract region and core from the mapping
-        region, core = core_mapping[i]
-        
-        # Locate datapoint in core_data
-        core_idx = core_data[(core_data['CLUMP'] == region) & (core_data['ID'] == core[4:])].index
-        if len(core_idx) == 0:
-            mapping.append(np.nan)
-        else:
-            mapping.append(core_idx[0])
-    
-    return mapping
-
-
-
-if __name__ == '__main__':
-    # Load core data
-    data_info = pd.read_csv('Data/Raw/7MTM2TM1_Core_catalogue_out_official_v3_run6Apr23+16Jan24_sn-5_may24_clump_cat.txt', sep='\s+', comment='\\')
-    data_info = data_info.drop(data_info.index[0]).reset_index(drop=True)
-    data_info.to_csv('Data/data_info.csv', index=False)
+            for i, group in enumerate(groups):
+                # Retrieve clusters belonging to that group
+                clusters = posthoc_results[var][group]
+                
+                # Define color and linestyle
+                if i < 10:
+                    clr = cmap.colors[i]
+                    style = '-'
+                elif i < 20:
+                    clr = cmap.colors[i - 10]
+                    style = '--'
+                else:
+                    clr = cmap.colors[i - 20]
+                    style = ':'
+                
+                # Retrieve index location of said cores
+                idx = data['Label'][data['Label'].isin(clusters)].index.to_list()
+                
+                # Plot density distribution
+                sns.kdeplot(data.iloc[idx], x=var, color=clr, ax=ax0, linestyle=style)
+                
+                mean_spectrum = spectra[idx].mean(axis=0)
+                mean_spectrum /= np.max(mean_spectrum)
+                
+                ax[i].plot(frequency, mean_spectrum, color=clr, linestyle=style, label=i)
+                
+            # Define legend and show figures
+            fig0.legend(list(groups), title='Group:')
+            
+            fig.legend(title='Group:')
+            fig.supxlabel('Frequency [MHz]')
+            fig.supylabel('Normalized Intensity [-]')
+            
+            plt.show()
