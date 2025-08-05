@@ -1,3 +1,4 @@
+# %% Import libraries
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -15,7 +16,7 @@ Variables of interest:
     - Tcore
 """
 
-# Load data
+# %% Load data
 freq = np.load('Data/frequencies.npy')
 if freq.shape == (2, 10000):
     print(f'Freq is stored separately')
@@ -29,12 +30,14 @@ velocity_info = pd.read_csv('Data/velocity_info.csv')
 labels, sizes = np.unique(velocity_info['CC_label'], return_counts=True)
 relevant_labels = [labels[i] for i in range(len(labels)) if sizes[i] >= 20]
 
-# Define dataframe
-variables = ['Mcore', 'Tcore', 'Lclump']
-df = data_info[variables]
+# %% Define dataframe
+variables = ['DIST', 'Lclump', 'Mclump', 'Tclump', 'Tcore', 'Mcore', 'Dcore', 'Lclump/Mclump']
 
 idx = []
 labels = []
+sc_pair = []
+
+# Filter data from data_info not in velocity_info
 for i in range(len(data_info)):
     source = data_info['CLUMP'].iloc[i]
     core = data_info['ID'].iloc[i]
@@ -43,30 +46,76 @@ for i in range(len(data_info)):
     if len(index) > 0:
         idx.append(index[0])
         labels.append(velocity_info['CC_label'].iloc[index[0]])
+        
+        sc_pair.append((source, core))
 
-df = df.iloc[idx]
-df['Label'] = labels
+df = data_info.iloc[idx]
 
-# Test analyzer
+# Filter data from velocity_info not in data_info
+sc_pair_2 = [(velocity_info['Source'].iloc[i], velocity_info['Core'].iloc[i]) for i in range(len(velocity_info))]
+mask = [True if sc_pair_2[i] in sc_pair else False for i in range(len(sc_pair_2))]
+subtraction_signal = subtraction_signal[mask]
+
+# Add label column
+df['Label'] = velocity_info['CC_label'][mask]
+
+
+# %% Analyze whether cores from the same source belong to the same cluster
+cores_per_source = np.array([len(df['ID'][df['CLUMP'] == source].unique()) for source in df['CLUMP'].unique()])
+n_cores_per_source, instances_core = np.unique(cores_per_source, return_counts=True)
+
+clusters_per_source = np.array([len(df['Label'][df['CLUMP'] == source].unique()) for source in df['CLUMP'].unique()])
+n_clusters_per_source, instances_clusters = np.unique(clusters_per_source, return_counts=True)
+
+ratio = clusters_per_source / cores_per_source
+mean_ratio = [np.mean(ratio[cores_per_source == n_cores_per_source[i]]) for i in range(len(n_cores_per_source))]
+
+from scipy.stats import linregress
+
+# Linear regression between n_cores_per_source and mean_ratio
+slope, intercept, r_value, p_value, std_err = linregress(n_cores_per_source, mean_ratio)
+print(f'R2 = {r_value**2}')
+
+plt.scatter(n_cores_per_source, mean_ratio, label='Data')
+plt.plot(n_cores_per_source, intercept + slope * n_cores_per_source, color='black', linestyle='--', label=f'y={slope:.3f}x + {intercept:.3f}')
+
+plt.xlabel('Cores per source')
+plt.ylabel('Mean(N_clusters / N_cores)')
+plt.legend()
+plt.show()
+
+
+# %% Analyze the distribution of data
 from src.analysis.cluster_analysis import Analyzer
 analyzer = Analyzer(minimum_samples=20)
-results = analyzer.test_median_difference(df)
-posthoc_results = analyzer.posthoc_test(df, results)
+# analyzer.test_normality(df, plot_results=False, variables=['Mcore', 'Tcore', 'Lclump'])
+results = analyzer.test_median_difference(df[df['Label'].isin(relevant_labels)], variables=variables, show=False, save=True)
+posthoc_results = analyzer.posthoc_test(df[df['Label'].isin(relevant_labels)], results)
+analyzer.visualize_results(data=df[df['Label'].isin(relevant_labels)], posthoc_results=posthoc_results, spectra=subtraction_signal[df['Label'].isin(relevant_labels)], frequency=freq)
 
+# %% TODO: correlate variables to clusters
 
-print('\nPosthoc results:')
-for var in posthoc_results.keys():
-    print(f'{var}:')
-    
-    groups = posthoc_results[var].keys()
-    print(f'\t{len(groups)} groups')
-    
-    sizes = [len(posthoc_results[var][group]) for group in groups]
-    print(f'\tSizes: {sizes}')
-    
-analyzer.visualize_results(data=df, posthoc_results=posthoc_results,
-                           spectra=subtraction_signal, frequency=freq)
+# variables = ['DIST', 'Lclump', 'Mclump', 'Tclump', 'Tcore', 'Mcore', 'Dcore', 'Lclump/Mclump']
+# for var in variables:
+#     # Filter relevant data
+#     subset = df[df['Label'].isin(relevant_labels)]
 
-        
-# TODO: check splits with other labelling assignments
-# TODO: correlate observed properties to the spectra
+#     # Compute mean per label and sort
+#     means = subset.groupby('Label')[var].median().sort_values()
+#     sorted_labels = means.index[::-1]
+
+#     # Reorder 'Label' as a categorical with sorted order
+#     subset = subset.copy()
+#     subset['Label'] = pd.Categorical(subset['Label'], categories=sorted_labels, ordered=True)
+
+#     # Plot boxplot
+#     subset.boxplot(column=var, by='Label', grid=False, figsize=(12, 5))
+
+#     plt.title(f'Boxplot of {var} by Label (sorted by mean)')
+#     plt.suptitle('')
+#     plt.xlabel('Label')
+#     plt.ylabel(var)
+#     plt.tight_layout()
+#     plt.show()
+    
+# %%

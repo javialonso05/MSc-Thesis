@@ -227,13 +227,16 @@ class Analyzer:
                 
     def test_median_difference(self,
                                data: pd.DataFrame,
-                               variables: list[str] = None) -> dict:
+                               variables: list[str] = None,
+                               show: bool = False, save: bool = False) -> dict:
         """
         Test whether the difference in the median of variables is statistically significant
         
         Args:
             data (pd.DataFrame): Physical properties of the clusters
-            variables (list[str]): Variables to test for normality. If None, all variables will be tested
+            variables (list[str], optional): Variables to test for normality. If None, all variables will be tested
+            show(bool, optional): Flag for plotting the distributions of the data.
+            save(bool, optional): Flag for saving the plot.
 
         Returns:
             tuple[dict, dict]: Results of the ANOVA and posthoc tests
@@ -268,6 +271,31 @@ class Analyzer:
             
             # Report results
             print(f'{var}:\t{round(p_value, 5)}')
+            
+            # Plot results
+            if show:
+                # Compute mean per label and sort
+                means = data.groupby('Label')[var].median().sort_values()
+                sorted_labels = means.index[::-1]
+
+                # Reorder 'Label' as a categorical with sorted order
+                subset = data.copy()
+                subset['Label'] = pd.Categorical(subset['Label'], categories=sorted_labels, ordered=True)
+
+                # Plot boxplot
+                subset.boxplot(column=var, by='Label', grid=False, figsize=(12, 5))
+                
+                plt.title(f'{var} - {test}: {p_value:.3f}')
+                plt.suptitle('')
+                plt.xlabel('Label')
+                plt.ylabel(var)
+                plt.tight_layout()
+                if save:
+                    if var == 'Lclump/Mclump':
+                        plt.savefig(f'results/Plots/Lclump_Mclump_boxplot.pdf')
+                    else:
+                        plt.savefig(f'results/Plots/{var}_boxplot.pdf')
+                plt.show()
                 
         print('-' * 25)
         
@@ -397,13 +425,10 @@ class Analyzer:
                     clr = cmap.colors[i - 20]
                     style = ':'
                 
-                # Retrieve index location of said cores
-                idx = data['Label'][data['Label'].isin(clusters)].index.to_list()
-                
                 # Plot density distribution
-                sns.kdeplot(data.iloc[idx], x=var, color=clr, ax=ax0, linestyle=style)
+                sns.kdeplot(data[data['Label'].isin(clusters)], x=var, color=clr, ax=ax0, linestyle=style)
                 
-                mean_spectrum = spectra[idx].mean(axis=0)
+                mean_spectrum = spectra[data['Label'].isin(clusters)].mean(axis=0)
                 mean_spectrum /= np.max(mean_spectrum)
                 
                 ax[i].plot(frequency, mean_spectrum, color=clr, linestyle=style, label=i)
