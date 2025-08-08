@@ -152,7 +152,7 @@ class Analyzer:
     def test_normality(self,
                     data: pd.DataFrame,
                     variables: list[str] = None,
-                    plot_results: bool = False) -> dict[str: dict[int: float]]:
+                    plot_results: bool = False, save: bool = False) -> dict[str: dict[int: float]]:
         """
         Test the normality of the variables in the data, grouped by label
 
@@ -160,6 +160,7 @@ class Analyzer:
             data (pd.DataFrame): Physical properties of the clusters
             variables (list[str], optional): Variables to test for normality. If None, all variables will be tested
             plot_results (bool, optional): Flag for plotting the results of the normality test as boxplots
+            save (bool, optional): Flag for saving the plots
 
         Returns:
             dict[str: dict[int: float]]: For each variable, test whether each cluster's distribution is normal
@@ -182,7 +183,7 @@ class Analyzer:
             normality = {}
             # Iterate through clusters
             for i, label in enumerate(unique_labels):
-                if size[i] < self.min_n:
+                if size[i] < self.min_n or np.isnan(unique_labels[i]):
                     continue
                 
                 valid_labels.append(label)
@@ -200,35 +201,36 @@ class Analyzer:
             results[var] = normality
         
         # Plot results
-        if plot_results:
-            fig, axes = plt.subplots(len(variables) - 1, 1, figsize=(8, 5 * (len(variables) - 1)))
-            
+        if plot_results:            
             import seaborn as sns
-            for i, var in enumerate(variables):
-                if i == len(variables) - 1:
-                    continue
-                
+            for i, var in enumerate(variables):                
                 # Select axis
-                ax = axes[i]
+                fig, ax = plt.subplots(figsize=(8, 5))
                 
                 # Determine box color
                 color_map = ['g' if results[var][j] < 0.05 else 'r' for j in results[var].keys()]
                 
                 # Draw boxplot
-                box = sns.boxplot(data[data['Label'].isin(valid_labels)], x='Label', y=var, ax=ax, palette=color_map)
+                box = sns.boxplot(data[data['Label'].isin(valid_labels)], x='Label', hue='Label', y=var, ax=ax, legend=False, palette=color_map)
                 
                 # Set title
                 ax.set_title(var)
             
-            plt.tight_layout()
-            plt.show()
+                # Show plots
+                plt.tight_layout()
+                if save:
+                    if var == 'Lclump/Mclump':
+                        fig.savefig(f'results/Plots/Lclump_Mclump_normality_test.pdf')
+                    else:
+                        fig.savefig(f'results/Plots/{var}_normality_test.pdf')
+                plt.show()
         
         return results
                 
     def test_median_difference(self,
                                data: pd.DataFrame,
                                variables: list[str] = None,
-                               show: bool = False, save: bool = False) -> dict:
+                               show: bool = False, save: str = None) -> dict:
         """
         Test whether the difference in the median of variables is statistically significant
         
@@ -236,7 +238,7 @@ class Analyzer:
             data (pd.DataFrame): Physical properties of the clusters
             variables (list[str], optional): Variables to test for normality. If None, all variables will be tested
             show(bool, optional): Flag for plotting the distributions of the data.
-            save(bool, optional): Flag for saving the plot.
+            save(str, optional): Title of the saved figure. If None, the figure will not be saved.
 
         Returns:
             tuple[dict, dict]: Results of the ANOVA and posthoc tests
@@ -292,9 +294,9 @@ class Analyzer:
                 plt.tight_layout()
                 if save:
                     if var == 'Lclump/Mclump':
-                        plt.savefig(f'results/Plots/Lclump_Mclump_boxplot.pdf')
+                        plt.savefig(f'results/Plots/{save}_Lclump_Mclump_boxplot.pdf')
                     else:
-                        plt.savefig(f'results/Plots/{var}_boxplot.pdf')
+                        plt.savefig(f'results/Plots/{save}_{var}_boxplot.pdf')
                 plt.show()
                 
         print('-' * 25)
@@ -381,7 +383,8 @@ class Analyzer:
                           posthoc_results: dict,
                           spectra: np.ndarray,
                           frequency: np.ndarray,
-                          variables: list[str] = None) -> None:
+                          variables: list[str] = None,
+                          save: str = None) -> None:
         """
         Visualize the distributions identified by the posthoc test for the given variables and their corresponding spectra
 
@@ -391,6 +394,7 @@ class Analyzer:
             spectra (np.ndarray): intensity spectra for each of the signals.
             frequency (np.ndarray): frequency channels corresponding to spectra.
             variables (list[str], optional): list of variables to plot. If None, all variables will be plotted.
+            save (str, optional): name of the save file. If None, the file will not be saved.
         """
         import seaborn as sns
         
@@ -407,6 +411,9 @@ class Analyzer:
             fig0, ax0 = plt.subplots(figsize=(8, 5))  # Figure for the density distributions
             cmap = plt.get_cmap('tab10')
             
+            # Calculate overall density distribution
+            sns.kdeplot(data=data, x=var, color='black', ax=ax0, linewidth=5)
+            
             # Initialize second figure
             fig, ax = plt.subplots(len(groups), 1, sharex=True, figsize=(10, 4 * len(groups)))
                 
@@ -421,8 +428,14 @@ class Analyzer:
                 elif i < 20:
                     clr = cmap.colors[i - 10]
                     style = '--'
-                else:
+                elif i < 30:
                     clr = cmap.colors[i - 20]
+                    style = ':'
+                elif i < 40:
+                    clr = cmap.colors[i - 30]
+                    style = ':'
+                else:
+                    clr = cmap.colors[i - 40]
                     style = ':'
                 
                 # Plot density distribution
@@ -431,13 +444,90 @@ class Analyzer:
                 mean_spectrum = spectra[data['Label'].isin(clusters)].mean(axis=0)
                 mean_spectrum /= np.max(mean_spectrum)
                 
-                ax[i].plot(frequency, mean_spectrum, color=clr, linestyle=style, label=i)
+                if len(groups) > 1:
+                    ax[i].plot(frequency, mean_spectrum, color=clr, linestyle=style, label=i)
+                else:
+                    ax.plot(frequency, mean_spectrum, color=clr, linestyle=style, label=i)
                 
             # Define legend and show figures
-            fig0.legend(list(groups), title='Group:')
+            fig0.legend(['Overall'] + list(groups), title='Group:')
             
             fig.legend(title='Group:')
             fig.supxlabel('Frequency [MHz]')
             fig.supylabel('Normalized Intensity [-]')
             
+            if save:
+                if var != 'Lclump/Mclump':
+                    fig0.savefig(f'results/Plots/{save}_{var}_density_distribution.pdf')
+                    fig.savefig(f'results/Plots/{save}_{var}_spectra.pdf')
+                else:
+                    fig0.savefig(f'results/Plots/{save}_Lclump_Mclump_density_distribution.pdf')
+                    fig.savefig(f'results/Plots/{save}_Lclump_Mclump_spectra.pdf')
+            
             plt.show()
+
+    def visualize_cluster_distribution_split(self,
+                                             data: pd.DataFrame,
+                                             spectra: np.ndarray,
+                                             frequency: np.ndarray,
+                                             variables: list[str] = None,
+                                             save: str = None):
+        """
+
+        Args:
+            data (pd.DataFrame): _description_
+            spectra (np.ndarray): _description_
+            frequency (np.ndarray): _description_
+            variables (list[str], optional): _description_. Defaults to None.
+            save (str, optional): _description_. Defaults to None.
+        """
+        from seaborn import kdeplot
+        
+        
+        if variables is None:
+            variables = list(data.columns)
+            variables = variables.remove('Label')
+        
+        labels, sizes = np.unique(data['Label'], return_counts=True)
+        colors = plt.get_cmap('tab20').colors
+        
+        # Plot spectra
+        if sum(sizes > self.min_n) > 20:
+            print('WARNING: Only the first 20 spectra are being shown')
+        
+        fig, ax = plt.subplots(5, 4, figsize=(20, 12), sharex=True)
+        ax = ax.flatten()
+        
+        sorted_labels = labels[np.argsort(-sizes)]
+        sorted_sizes = -np.sort(-sizes)
+        for i in range(min(len(sorted_labels), 20)):
+            mean_spectrum = spectra[data['Label'] == sorted_labels[i]].mean(axis=0)
+            ax[i].plot(frequency, mean_spectrum / np.max(mean_spectrum), color=colors[i], label=f'{sorted_sizes[i]} signals')
+            ax[i].legend(loc='upper left')
+        
+        fig.supxlabel('Frequency [MHz]')
+        fig.supylabel('Normalized intensity [Jy]')
+        plt.tight_layout()
+        plt.show()
+        
+        # Plot distributions
+        for var in variables:
+            # Initialize figure
+            fig, ax = plt.subplots(figsize=(8, 5))
+            
+            # Calculate overall distribution
+            kdeplot(data=data[var], ax=ax, color='black', linewidth=5)
+            
+            for i, label in enumerate(sorted_labels):
+                kdeplot(data=data[var][data['Label'] == label], ax=ax, color=colors[i])
+            
+            ax.legend(['Overall'] + list(sorted_labels))
+            
+            if save:
+                if var == 'Lclump/Mclump':
+                    plt.savefig(f'results/Plots/{save}_Lclump_Mclump_cluster_density_split.pdf')
+                else:
+                    plt.savefig(f'results/Plots/{save}_{var}_cluster_density_split.pdf')
+            
+            plt.show()
+            
