@@ -24,6 +24,8 @@ class RedShiftCorrector:
         # Create reference signal
         if reference_signal is None:
                 peaks = [
+                    218222.192,  # H2CO
+                    218475.632,  # H2CO
                     220398.684,  # 13CO(2-1)
                     219949.433,  # SO(5,6-4,5)
                     219560.358   # C18O(2-1)
@@ -37,6 +39,7 @@ class RedShiftCorrector:
     
     def _calculate_velocity(self,
                             signal_array: np.ndarray,
+                            method: str,
                             dv_0: float = 1.0,
                             dv_1: float = 0.01):
         """
@@ -48,8 +51,8 @@ class RedShiftCorrector:
         
         # Initialize velocity list
         signal_velocities = []
-        if signal_array.shape[1] == 20000:
-            signal_array = signal_array[:, 10000:]
+        if signal_array.shape[1] != self.reference_signal.shape[1]:  # Use only spw1
+            raise ValueError(f"The shape of the input ({signal_array[0].shape[1]}) and reference signal ({self.reference_signal.shape[1]}) do not match")
         
         # Start iteration
         for i in tqdm(range(len(signal_array)), desc='Shifting signals'):
@@ -58,47 +61,119 @@ class RedShiftCorrector:
 
             # Find broad alignment
             max_sim = -1
-            for v in np.arange(-250, 251, dv_0):
-                shifted_signal = shift_signal(self.frequency, signal, v)
-                similarity = cosine_similarity(shifted_signal.reshape(1, -1),
-                                               self.reference_signal)
-
-                if similarity > max_sim:
-                    max_sim = similarity
-                    best_vel = v
+            best_vel = self._grid_search(signal=signal,
+                                         v_min=-250,
+                                         v_max=250,
+                                         dv=1,
+                                         best_sim=max_sim,
+                                         best_v=0)
 
             # Fine-tune alignment
-            for v in np.arange(best_vel - 1, best_vel + 1 + dv_1, dv_1):
-                shifted_signal = shift_signal(self.frequency, signal, v)
-                similarity = cosine_similarity(shifted_signal.reshape(1, -1),
-                                               self.reference_signal)
-                
-                if similarity > max_sim:
-                    max_sim = similarity
-                    best_v = v
-
-            signal_velocities.append(best_v)
+            sim = cosine_similarity(self.reference_signal, shift_signal(self.frequency, signal, best_vel).reshape(1, -1))
+            if method == 'grid':  # grid search
+                best_vel = self._grid_search(signal=signal,
+                                    v_min=-best_vel - 1,
+                                    v_max=best_vel + 1,
+                                    dv=0.01,
+                                    best_sim=sim,
+                                    best_v=best_vel)
+            else:  # recursive bisection
+                best_vel = self._recursive_bisection(
+                    signal=signal,
+                    best_v=best_vel,
+                    best_sim=sim
+                )
+            
+            signal_velocities.append(best_vel)
 
         return signal_velocities
     
+    def _grid_search(self,
+                     signal: np.ndarray,
+                     v_min: float,
+                     v_max: float,
+                     dv: float,
+                     best_sim: float,
+                     best_v: float):
+        """
+
+        Args:
+            signal (np.ndarray): _description_
+            v_min (float): _description_
+            v_max (float): _description_
+            dv (float): _description_
+            current_sim (float): _description_
+        """
+        for v in np.arange(v_min, v_max + dv, dv):
+            shifted_signal = shift_signal(self.frequency, signal, v)
+            similarity = cosine_similarity(shifted_signal.reshape(1, -1), self.reference_signal)
+            
+            if similarity > best_sim:
+                best_sim = similarity
+                best_v = v
+        
+        return best_v
+        ...
+    
+    def _recursive_bisection(self,
+                             signal: np.ndarray,
+                             best_v: float,
+                             best_sim: float,
+                             tol: float = 1e-3,
+                             dv: float = 0.1):
+        """
+
+        Args:
+            signal (np.ndarray): _description_
+            best_v (float): _description_
+            best_sim (float): _description_
+            tol (float, optional): _description_. Defaults to 1e-10.
+            dv (float, optional): _description_. Defaults to 0.1.
+        """
+        
+        v = best_v - dv
+        current_similarity = -1
+        while abs(dv) > tol:
+            v += dv
+            
+            shifted_signal = shift_signal(self.frequency, signal, v)
+            similarity = cosine_similarity(shifted_signal.reshape(1, -1), self.reference_signal)
+            
+            if similarity < current_similarity:
+                dv /= -2
+            
+            current_similarity = similarity
+            
+        if current_similarity > best_sim:  
+            # The algorithm found a more exact velocity
+            return v
+        else:
+            # The algorithm got trapped in a relative maximum
+            return best_v
+            
+
     def fit(self,
             raw_data: np.ndarray,
             mapping: list,
             residual: np.ndarray = None,
-            filtering: list = ['None', 'subtraction', 'sigma']) -> pd.DataFrame:
+            filtering: list = ['None', 'subtraction', 'sigma'],
+            method: str = "grid") -> pd.DataFrame:
         """
         Find the velocities of all sources according to a majority-voting scheme
 
         Args:
-            raw_data (np.ndarray): array with the interpolated raw signals
+            raw_data (np.ndarray): array with the interpolated raw signals.
+            mapping (list): ordered list corresponding to the sources and cores of each signal in raw_data.
             residual (np.ndarray): array with each signals residual. Defaults to None.
-            filtering (list): List of filtering methods to be used. Defaults to [None, 'subtraction', 'sigma'].
-
+            filtering (list, optional): list of filtering methods to be used. Defaults to [None, 'subtraction', 'sigma'].
+            method (str, optional): method to use during the fine search. Acceptable values are "grid" and "bisection". Defaults to "grid".
+            
         Raises:
             ValueError: Residual is required if "subtraction" or "sigma" are in "filtering"
             ValueError: Signal and residual data shape do not match
             ValueError: Unknown filtering method. Accepted methods are "subtraction", "sigma" and "savgol"
             ValueError: Length of data array and mapping do not match
+            ValueError: Unknown search method. Acceptable methods are "grid" and "bisection".
             Warning: Majority voting can lead to errors if an even number of methods is used.
 
         Returns:
@@ -115,6 +190,8 @@ class RedShiftCorrector:
             raise Warning('Majority voting can lead to errors if an even number of methods is used.')
         if len(mapping) != len(raw_data):
             raise ValueError('Length of data array and mapping do not match')
+        if method != "bisection" and method != "grid":
+            raise ValueError('Unknown search method. Acceptable methods are "grid" and "bisection".')
         
         # Create output dataframe
         results = {
@@ -132,7 +209,7 @@ class RedShiftCorrector:
                 signal_data = raw_data
             else:
                 signal_data = filter_data(data=raw_data, filter_type=method, residual=residual)
-            velocity_list = self._calculate_velocity(signal_data)
+            velocity_list = self._calculate_velocity(signal_data, method)
             
             # Define tag\
             tag = f'{method}_velocity'
@@ -152,13 +229,16 @@ class RedShiftCorrector:
             
             # Pick the velocity with the highest count (most common within tolerance)
             best_idx = np.argmax(counts)
-            best_v = row[best_idx]
             
             # If counts = 0, best_v will be NaN
             if np.all(counts == 0):
                 results['Best_velocity'].append(np.nan)
             else:
-                results['Best_velocity'].append(best_v)
+                best_v = np.mean(row[np.abs(row - row[best_idx]) <= self.tol])
+                if np.abs(best_v) > 200:
+                    results['Best_velocity'].append(np.nan)
+                else:
+                    results['Best_velocity'].append(best_v)
             
             # Append mapping data
             results['Source'].append(mapping[i][0])
@@ -167,7 +247,8 @@ class RedShiftCorrector:
         # Convert to dataframe and return
         results = pd.DataFrame(results)
         self.results = results
-        return results
+        return results      
+                   
 
 # Loading data functions
 def load_data(base_dir: str):

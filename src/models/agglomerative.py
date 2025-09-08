@@ -10,7 +10,10 @@ from sklearn.neighbors import NearestNeighbors
 
 
 class CustomAgglomerativeClustering:
-    def __init__(self, k_neighbors: int = 10, k0_neighbors: int = 1, distance_metric: str = 'cosine'):
+    def __init__(self, 
+                 k_neighbors: int = 10, 
+                 k0_neighbors: int = 1, 
+                 distance_metric: str = 'cosine'):
         """
         Graph-based agglomerative clustering based on Zhang et al. (2012)
         :param k_neighbors: number of neighbors to consider when clustering
@@ -376,6 +379,81 @@ class CustomAgglomerativeClustering:
         return steps
 
 
+#TODO: remove if not useful
+class AgglomerativeModel(AgglomerativeClustering):
+    def __init__(self, 
+                 n_clusters = None,
+                 *, 
+                 metric = "cosine", 
+                 memory = None, 
+                 connectivity = None, 
+                 compute_full_tree = "auto", 
+                 linkage = "ward", 
+                 distance_threshold = 0.3, 
+                 compute_distances = False):
+        super().__init__(n_clusters, metric=metric, memory=memory, connectivity=connectivity, compute_full_tree=compute_full_tree, linkage=linkage, distance_threshold=distance_threshold, compute_distances=compute_distances)
+    
+    def _calculate_distances(self, X, **kwargs):
+        """
+        Calculate the pairwise distances between datapoints.
+        If metric is 'piecewise', use piecewise_cosine_distance from src.features.evaluation.
+        Otherwise, use the metric supported by AgglomerativeClustering.
+        """
+        if self.metric == "piecewise":
+            from src.features.evaluation import piecewise_cosine_distance
+            window = kwargs.get("window", None)
+            stride = kwargs.get("stride", None)
+            norm_type = kwargs.get("norm_type", "max")
+            return piecewise_cosine_distance(X, window=window, stride=stride, norm_type=norm_type)
+        else:
+            from sklearn.metrics import pairwise_distances
+            return pairwise_distances(X, metric=self.metric)
+
+    def fit(self, 
+            X, y=None, **kwargs):
+        if self.metric == 'piecewise':
+            distance_matrix = self._calculate_distances(X, **kwargs)
+            self.metric = 'precomputed'
+            return self._fit(distance_matrix)
+        else:
+            return self._fit(X)
+
+    def clustering_report(self, 
+                          size_threshold: int = 20,
+                          show: bool = False,
+                          save: str = None) -> None:
+        """
+        Print a clustering report detailing how many clusters with a certain number of signals 
+        exist and what proportion of the signals belong to those clusters.
+
+        Args:
+            size_threshold (int, optional): Minimum size of the cluster to be considered. Defaults to 20.
+            show (bool, optional): Flag for plotting the assignment distribution. Defaults to False.
+            save (str, optional): Name of the saved file. Defaults to None (does not save).
+        """
+        unique_labels, sizes = np.unique(self.labels_, return_counts=True)
+        print(f"Clusters with {size_threshold} or more signals: {sum(sizes >= size_threshold)}")
+        print(f"Proportion of clustered signals: {sum(sizes[sizes >= 20])}/{sum(sizes)} ({sum(sizes[sizes >= 20]) / sum(sizes) * 100:.2f}%)")
+        
+        if show:
+            import matplotlib.pyplot as plt
+            sorted_labels = unique_labels[np.argsort(-sizes)]
+            sorted_sizes = -np.sort(-sizes)
+            
+            n = np.argmin(np.abs(sorted_sizes - (size_threshold - 1)))
+            if n < 2:
+                n = len(unique_labels)
+            plt.bar(np.arange(n), sorted_sizes[:n])
+            plt.xticks(ticks=np.arange(n), labels=sorted_labels[:n])
+            plt.xlabel("Cluster label")
+            plt.ylabel("Cluster size")
+            
+            plt.tight_layout()
+            if save:
+                plt.savefig(save)
+            plt.show()
+
+
 def compare_clusterings(list_of_labels: list, plot: bool = True, legend: list = None):
     """
     Compare the output of several GDL clusterings
@@ -441,58 +519,60 @@ def check_reclustering(signals, centroids, true_labels, pred_labels, cluster):
             plt.show()
 
 
-if __name__ == '__main__':
-    from src.data.data_processor import filter_data
-    from src.features.transformations import shift_signal
 
-    from sklearn.metrics import adjusted_rand_score
-    import matplotlib.pyplot as plt
-    import pandas as pd
-
-    # Load raw data
-    freq:np.ndarray = np.load('Data/frequencies.npy')
-    intensity_array = np.load('Data/intensity_array.npy')
-    residual_array = np.load('Data/residual_array.npy')
-
-    data_info: pd.DataFrame = pd.read_csv('Data/data_info.csv')
-    best_v = data_info['Best velocity 2'].values
-
-    # Shift data
-    # pyrefly: ignore
-    shifted_signals: np.ndarray = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    # pyrefly: ignore
-    shifted_residual: np.ndarray = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-
-    # Filter data
-    subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
-    # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifte   d_residual)
-    # savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
-
-    from src.features.evaluation import piecewise_cosine_distance
-    # dist_matrix = cosine_distances(subtraction_signal, subtraction_signal)
     
-    dist_matrix = piecewise_cosine_distance(subtraction_signal, window=2500, stride=200)
-    print(f"Distance matrix shape: {dist_matrix.shape}")
+    
+    # from src.data.data_processor import filter_data
+    # from src.features.transformations import shift_signal
 
-    # Train complete agglomerative clustering
-    ac_complete: AgglomerativeClustering = AgglomerativeClustering(
-        n_clusters=None, 
-        metric='precomputed', 
-        linkage='complete', 
-        distance_threshold=0.3)
-    ac_complete.fit(dist_matrix)
+    # from sklearn.metrics import adjusted_rand_score
+    # import matplotlib.pyplot as plt
+    # import pandas as pd
+
+    # # Load raw data
+    # freq:np.ndarray = np.load('Data/frequencies.npy')
+    # intensity_array = np.load('Data/intensity_array.npy')
+    # residual_array = np.load('Data/residual_array.npy')
+
+    # data_info: pd.DataFrame = pd.read_csv('Data/data_info.csv')
+    # best_v = data_info['Best velocity 2'].values
+
+    # # Shift data
+    # # pyrefly: ignore
+    # shifted_signals: np.ndarray = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+    # # pyrefly: ignore
+    # shifted_residual: np.ndarray = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
+
+    # # Filter data
+    # subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
+    # # sigma_signal = filter_data(np.asarray(shifted_signals), 'sigma', shifte   d_residual)
+    # # savgol_signal = filter_data(np.asarray(shifted_signals), 'savgol')
+
+    # from src.features.evaluation import piecewise_cosine_distance
+    # # dist_matrix = cosine_distances(subtraction_signal, subtraction_signal)
     
-    # Train average agglomerative clustering
-    ac_average: AgglomerativeClustering = AgglomerativeClustering(
-        n_clusters=None, 
-        metric='precomputed', 
-        linkage='average', 
-        distance_threshold=0.3)
-    ac_average.fit(dist_matrix)
+    # dist_matrix = piecewise_cosine_distance(subtraction_signal, window=2500, stride=200)
+    # print(f"Distance matrix shape: {dist_matrix.shape}")
+
+    # # Train complete agglomerative clustering
+    # ac_complete: AgglomerativeClustering = AgglomerativeClustering(
+    #     n_clusters=None, 
+    #     metric='precomputed', 
+    #     linkage='complete', 
+    #     distance_threshold=0.3)
+    # ac_complete.fit(dist_matrix)
     
-    # Save label assignments
-    labels_complete = ac_complete.labels_
-    labels_average = ac_average.labels_
+    # # Train average agglomerative clustering
+    # ac_average: AgglomerativeClustering = AgglomerativeClustering(
+    #     n_clusters=None, 
+    #     metric='precomputed', 
+    #     linkage='average', 
+    #     distance_threshold=0.3)
+    # ac_average.fit(dist_matrix)
     
-    np.save('models/agglomerative/piecewise_complete_labels.npy', labels_complete)
-    np.save('models/agglomerative/piecewise_average_labels.npy', labels_average)
+    # # Save label assignments
+    # labels_complete = ac_complete.labels_
+    # labels_average = ac_average.labels_
+    
+    # np.save('models/agglomerative/piecewise_complete_labels.npy', labels_complete)
+    # np.save('models/agglomerative/piecewise_average_labels.npy', labels_average)

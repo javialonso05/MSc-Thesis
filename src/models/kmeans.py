@@ -14,14 +14,14 @@ from src.features.transformations import transform_signal
 
 
 class CustomKMeans(BaseEstimator, ClusterMixin):
-    def __init__(self, n_clusters=8, n_init=5, max_iter=300,
+    def __init__(self, n_clusters=8, n_init=5, max_iter=100,
                  tol=1e-4, random_state=42, distance_metric=None):
         self.n_clusters = n_clusters
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
         self.random_state = random_state
-        if distance_metric is None:
+        if distance_metric == "cosine":
             from sklearn.metrics.pairwise import cosine_distances
             self.distance_metric = cosine_distances
         else:

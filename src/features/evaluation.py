@@ -1,9 +1,7 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from scipy.optimize import linear_sum_assignment
-from sklearn.metrics import confusion_matrix
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 def within_cluster_similarity(data: np.ndarray, labels: list,
@@ -22,6 +20,8 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
     the value is set to np.nan
     """
     from sklearn.metrics.pairwise import cosine_similarity
+    import matplotlib.pyplot as plt
+    
     if len(data) != len(labels):
         raise ValueError('Data and labels_ must have the same length')
 
@@ -49,26 +49,32 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
 
 
     if plot:
+        # Calculate cluster size
+        total_signals = len(labels)
+        percentages = np.array([round((np.sum(labels == cluster) / total_signals) * 100) for cluster in clusters])
+        
+        # Sort labels by size
+        sorted_wcs = within_cluster_similarity[np.argsort(sizes)[::-1]]
+        sorted_percentages = percentages[np.argsort(sizes)[::-1]]
+        
         # Plot the within-cluster similarity
         width = 0.8
         plt.figure(figsize=(8, 4))
         if std:
-            plt.bar(np.arange(len(clusters)), within_cluster_similarity, width, yerr=within_cluster_std,
+            plt.bar(np.arange(len(clusters)), sorted_wcs, width, yerr=within_cluster_std,
                     color='tab:blue')
         else:
-            plt.bar(np.arange(len(clusters)), within_cluster_similarity, width, color='tab:blue')
+            plt.bar(np.arange(len(clusters)), sorted_wcs, width, color='tab:blue')
         plt.xlabel('Cluster')
         plt.ylabel('Cosine Similarity')
         plt.title('Within-Cluster Similarity') if title is None else plt.title(title)
 
         # Add percentage of signals that belong to each cluster
-        total_signals = len(labels)
-        percentages = [round((np.sum(labels == cluster) / total_signals) * 100) for cluster in clusters]
-        for i, percentage in enumerate(percentages):
+        for i, percentage in enumerate(sorted_percentages):
             if not std:
-                plt.text(i, within_cluster_similarity[i], f'{percentage}%', ha='center', va='bottom')
+                plt.text(i, sorted_wcs[i], f'{percentage}%', ha='center', va='bottom')
             else:
-                plt.text(i - width / 4, within_cluster_similarity[i], f'{percentage}%', ha='center', va='bottom')
+                plt.text(i - width / 4, sorted_wcs[i], f'{percentage}%', ha='center', va='bottom')
 
         plt.show()
 
@@ -78,10 +84,43 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
     return within_cluster_similarity
 
 
-def piecewise_cosine_distance(data,
-                              window=None,
-                              stride=None,
-                              norm_type='max'):
+def between_cluster_similarity(signals, labels, plot=False, text=False):
+    """
+
+    Args:
+        signals (_type_): _description_
+        labels (_type_): _description_
+        plot (bool, optional): _description_. Defaults to False.
+    """
+    from sklearn.metrics.pairwise import cosine_similarity
+    unique_labels, sizes = np.unique(labels, return_counts=True)
+    sorted_labels = unique_labels[np.argsort(sizes)[::-1]]
+    bcs = np.zeros((len(unique_labels), len(unique_labels)))
+    for i, label_i in enumerate(sorted_labels):
+        for j, label_j in enumerate(sorted_labels):
+            if i == j:
+                continue
+            signals_i = signals[labels == label_i]
+            signals_j = signals[labels == label_j]
+            bcs[i, j] = np.mean(cosine_similarity(signals_i, signals_j))
+
+    if plot:
+        plt.figure(figsize=(3*len(bcs), 3*len(bcs)))
+        plt.matshow(bcs)
+        if text:
+            for i in range(len(bcs)):
+                for j in range(len(bcs)):
+                    plt.text(i, j, np.round(bcs[i, j], 2), ha="center", va="center", color="white")
+        else:
+            plt.colorbar()
+        plt.show()
+    return bcs
+
+
+def piecewise_cosine_distance(data: np.ndarray,
+                              window: int = None,
+                              stride: int = None,
+                              norm_type: str = 'max'):
     """
     Custome distance metric that evaluates the cosine distance at several windows
     :param data:
@@ -160,6 +199,7 @@ def test_piecewise_noise_sensitivity(test_signal):
 
 
 def test_window_size(test_signals):
+    import matplotlib.pyplot as plt
     cosine_dist = 1 - cosine_similarity(test_signals[0].reshape(1, -1),
                                         test_signals[1].reshape(1, -1))[0]
     piecewise_dist = []
@@ -180,6 +220,9 @@ def clustering_overlap_score(labels1, labels2):
     Computes the best label alignment between two clustering results
     and returns the fraction of points that are assigned the same label.
     """
+    from sklearn.metrics import confusion_matrix
+    from scipy.optimize import linear_sum_assignment
+    
     labels1 = np.array(labels1)
     labels2 = np.array(labels2)
     assert labels1.shape == labels2.shape, "Label arrays must be the same length"
@@ -196,6 +239,9 @@ def overlapping_indices(labels1, labels2):
     """
     Returns the indices where the optimally permuted labels2 matches labels1.
     """
+    from sklearn.metrics import confusion_matrix
+    from scipy.optimize import linear_sum_assignment
+    
     labels1 = np.array(labels1)
     labels2 = np.array(labels2)
     assert labels1.shape == labels2.shape, "Label arrays must be the same length"
@@ -215,58 +261,3 @@ def overlapping_indices(labels1, labels2):
     overlap_idx = np.where(aligned_labels2 == labels1)[0]
 
     return overlap_idx.tolist()
-
-
-if __name__ == '__main__':
-    from src.data.data_processor import build_array, filter_data
-    from src.features.transformations import shift_signal
-
-    import pickle
-    import pandas as pd
-    from tqdm import tqdm
-
-    # Load raw data
-    interpolated_data = pickle.load(open('Data/Raw/interpolated_data_dict.pkl', 'rb'))
-
-    # Build arrays
-    f0 = interpolated_data['100132']['core1'][0]['Frequency']
-    f1 = interpolated_data['100132']['core1'][1]['Frequency']
-    freq = np.hstack((f0, f1))
-
-    spw1_array, mapping = build_array(interpolated_data, category='Intensity')
-    spw0_array = build_array(interpolated_data, category='Intensity', spw=0, return_log=False)
-    intensity_array = np.hstack((spw0_array, spw1_array))
-
-    residual_array_spw1 = build_array(interpolated_data, category='Residual', return_log=False)
-    residual_array = np.hstack((build_array(interpolated_data, category='Residual', return_log=False, spw=0), residual_array_spw1))
-
-    # Shift signals
-    data_info = pd.read_csv('Data/data_info.csv')
-    best_v = data_info['Best velocity 2'].values
-
-    shifted_signals = np.array([shift_signal(freq, intensity_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    shifted_residual = np.array([shift_signal(freq, residual_array[i], best_v[i]) for i in range(len(intensity_array)) if not np.isnan(best_v[i])])
-    shifted_mapping = [mapping[i] for i in range(len(mapping)) if not np.isnan(best_v[i])]
-
-    # Filter data
-    subtraction_signal = filter_data(np.asarray(shifted_signals), 'subtraction', shifted_residual)
-
-    # Test functions
-    signals = np.vstack((subtraction_signal[5], subtraction_signal[7]))
-    cosine_dis = 1 - cosine_similarity(signals[0].reshape(1, -1), signals[1].reshape(1, -1))[0]
-    values = []
-    for norm in ['max', 'int']:
-        norm_values = []
-        for window_size in tqdm(range(500, 5000, 500)):
-            stride_length = window_size // 2
-            psim = piecewise_cosine_distance(signals, window=window_size, stride=stride_length, norm_type=norm)
-            norm_values.append(psim[0, 1])
-        values.append(norm_values)
-
-    plt.plot(range(500, 5000, 500), np.array(values).T)
-    plt.axhline(cosine_dis, linestyle='--', color='black')
-    plt.legend(['max', 'int', 'cosine'])
-    plt.xlabel('Window size')
-    plt.ylabel('Distance')
-    plt.show()
-

@@ -287,7 +287,7 @@ class Analyzer:
                 # Plot boxplot
                 subset.boxplot(column=var, by='Label', grid=False, figsize=(12, 5))
                 
-                plt.title(f'{var} - {test}: {p_value:.3f}')
+                # plt.title(f'{var} - {test}: {p_value:.3f}')
                 plt.suptitle('')
                 plt.xlabel('Label')
                 plt.ylabel(var)
@@ -489,26 +489,26 @@ class Analyzer:
             variables = variables.remove('Label')
         
         labels, sizes = np.unique(data['Label'], return_counts=True)
-        colors = plt.get_cmap('tab20').colors
+        colors = plt.get_cmap('tab10').colors
         
-        # Plot spectra
-        if sum(sizes > self.min_n) > 20:
-            print('WARNING: Only the first 20 spectra are being shown')
+        # # Plot spectra
+        # if sum(sizes > self.min_n) > 20:
+        #     print('WARNING: Only the first 20 spectra are being shown')
         
-        fig, ax = plt.subplots(5, 4, figsize=(20, 12), sharex=True)
-        ax = ax.flatten()
+        # fig, ax = plt.subplots(5, 4, figsize=(20, 12), sharex=True)
+        # ax = ax.flatten()
         
         sorted_labels = labels[np.argsort(-sizes)]
-        sorted_sizes = -np.sort(-sizes)
-        for i in range(min(len(sorted_labels), 20)):
-            mean_spectrum = spectra[data['Label'] == sorted_labels[i]].mean(axis=0)
-            ax[i].plot(frequency, mean_spectrum / np.max(mean_spectrum), color=colors[i], label=f'{sorted_sizes[i]} signals')
-            ax[i].legend(loc='upper left')
+        # sorted_sizes = -np.sort(-sizes)
+        # for i in range(min(len(sorted_labels), 20)):
+        #     mean_spectrum = spectra[data['Label'] == sorted_labels[i]].mean(axis=0)
+        #     ax[i].plot(frequency, mean_spectrum / np.max(mean_spectrum), color=colors[i], label=f'{sorted_sizes[i]} signals')
+        #     ax[i].legend(loc='upper left')
         
-        fig.supxlabel('Frequency [MHz]')
-        fig.supylabel('Normalized intensity [Jy]')
-        plt.tight_layout()
-        plt.show()
+        # fig.supxlabel('Frequency [MHz]')
+        # fig.supylabel('Normalized intensity [Jy]')
+        # plt.tight_layout()
+        # plt.show()
         
         # Plot distributions
         for var in variables:
@@ -516,10 +516,10 @@ class Analyzer:
             fig, ax = plt.subplots(figsize=(8, 5))
             
             # Calculate overall distribution
-            kdeplot(data=data[var], ax=ax, color='black', linewidth=5)
+            kdeplot(data=data[var], ax=ax, color='black', linewidth=5, clip=(0, max(data[var])))
             
             for i, label in enumerate(sorted_labels):
-                kdeplot(data=data[var][data['Label'] == label], ax=ax, color=colors[i])
+                kdeplot(data=data[var][data['Label'] == label], ax=ax, color=colors[i], clip=(0, max(data[var])))
             
             ax.legend(['Overall'] + list(sorted_labels))
             
