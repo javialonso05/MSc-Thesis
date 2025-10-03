@@ -10,7 +10,7 @@ def shift_signal(frequency, signal, velocity):
     :return: shifted_signal, shifted_frequency
     """
 
-    c = 3e5
+    c = 3e5  # km/s
     shifted_frequency = frequency * (1 - velocity / c)
     shifted_signal = np.interp(shifted_frequency, frequency, signal, left=0, right=0)
     return shifted_signal

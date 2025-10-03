@@ -1,3 +1,4 @@
+# %%
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -12,6 +13,19 @@ from seaborn import kdeplot
 from scipy.stats import gaussian_kde
 
 
+# Load data
+freq = np.load("Data/frequencies.npy")
+shifted_signals = np.load("Data/Processed/shifted_signals.npy")
+shifted_signals /= np.max(shifted_signals, keepdims=True, axis=1)
+
+threshold_signals = np.load("Data/Processed/threshold_signals.npy")
+threshold_signals /= np.max(threshold_signals, keepdims=True, axis=1)
+
+subtraction_signals = np.load("Data/Processed/subtraction_signals.npy")
+subtraction_signals /= np.max(subtraction_signals, keepdims=True, axis=1)
+
+
+#%% 
 def plot_kde_gmm(data: np.ndarray, 
                  n_components: int = None, 
                  gmm: GaussianMixture = None, 
@@ -105,12 +119,6 @@ def plot_kde_gmm(data: np.ndarray,
     # ax.add_artist(legend1)
     if save_plot is not None:
         fig.savefig(save_plot)
-
-
-# Load data
-freq = np.load("Data/frequencies.npy")
-subtraction_signals = np.load("Data/Processed/subtraction_signals.npy")
-subtraction_signals /= np.max(subtraction_signals, keepdims=True, axis=1)
 
 # Reduce dimensionality
 # pca_data = PCA(n_components=30, random_state=42).fit_transform(subtraction_signals)

@@ -1,3 +1,4 @@
+# %%
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,7 +8,6 @@ from src.data.data_processor import shift_signal, filter_data
 freq = np.load("Data/frequencies.npy")
 signals = np.load("Data/intensity_array.npy")
 residuals = np.load("Data/residual_array.npy")
-mapping = np.load("Data/mapping.npy")
 
 peaks = [
             218222.192,  # H2CO
@@ -27,44 +27,37 @@ peak_labels = [
 
 
 # Read velocity table
-# velocity_table = pd.read_csv('Data/velocity_table.csv')
-# velocity_table.columns = ['source', 'nameAG', 'core_ID', 'v_clump', 'v_core', 'line', 'chi2', 'v_mean_g', 'group', 'v_mean_all', 'v_std']
-# velocity_table.to_csv("Data/velocity_table.csv", index=False)
+velocity_table = pd.read_csv("Data/velocity_info.csv")
 
+# %%
 # from src.data.data_processor import RedShiftCorrector
-velocities = pd.read_csv('Data/velocity_info.csv')
-# corrector = RedShiftCorrector(freq)
-# bisection_velocities = RedShiftCorrector(frequency=freq).fit(raw_data=signals, mapping=mapping, residual=residual, method='bisection')
-# bisection_velocities.to_csv("Data/velocity_info_bisection.csv", index=False)
+# new_velocities = RedShiftCorrector(frequency=freq).fit(signals, mapping, residuals)
 
-shifted_signals = np.load("Data/shifted_signals.npy")
-shifted_residual = np.load("Data/shifted_residual.npy")
 
-subtraction_signals = filter_data(shifted_signals, "subtraction", shifted_residual)
-threshold_signals = filter_data(shifted_signals, "sigma", shifted_residual)
+v_diff = velocity_table["Manual velocity"] - velocity_table["Automatic velocity"]
+v_diff = v_diff.dropna()
+print(f"{np.sum(np.abs(v_diff < 5))}/{len(v_diff)} ({np.round(100*np.sum(np.abs(v_diff < 5))/len(v_diff), 3)})")
 
-from umap import UMAP
-import seaborn as sns
+from src.features.transformations import shift_signal
 
-umap_raw = UMAP(n_neighbors=5, metric='cosine', random_state=42).fit_transform(shifted_signals)
-umap_sig = UMAP(n_neighbors=5, metric='cosine', random_state=42).fit_transform(threshold_signals)
-umap_sub = UMAP(n_neighbors=5, metric='cosine', random_state=42).fit_transform(subtraction_signals)
+v0 = velocity_table["Manual velocity"]
+v1 = velocity_table["Automatic velocity"]
 
-fig, ax = plt.subplots(2, 3, figsize=(12, 6))
+shifted_0 = np.array([shift_signal(freq, signals[i], v0.iloc[i]) for i in range(len(v0)) if not np.isnan(v0.iloc[i])])
+shifted_1 = np.array([shift_signal(freq, signals[i], v1.iloc[i]) for i in range(len(v1))])
 
-ax[0, 0].set_title("Raw")
-ax[0, 0].scatter(umap_raw[:, 0], umap_raw[:, 1], color='tab:blue', alpha=0.3)
-
-ax[0, 1].set_title("Threshold-filtered")
-ax[0, 1].scatter(umap_sig[:, 0], umap_sig[:, 1], color='tab:orange', alpha=0.3)
-
-ax[0, 2].set_title("Subtraction-filtered")
-ax[0, 2].scatter(umap_sub[:, 0], umap_sub[:, 1], color='tab:green', alpha=0.3)
-
-sns.kdeplot(x=umap_raw[:, 0], y=umap_raw[:, 1], fill=True, cmap="Blues", ax=ax[1, 0])
-sns.kdeplot(x=umap_sig[:, 0], y=umap_sig[:, 1], fill=True, cmap="Oranges", ax=ax[1, 1])
-sns.kdeplot(x=umap_sub[:, 0], y=umap_sub[:, 1], fill=True, cmap="Greens", ax=ax[1, 2])
-
+fig, ax = plt.subplots(2, 1, sharex=True, figsize=(12, 5))
+ax[0].plot(freq, shifted_0.mean(axis=0))
+ax[1].plot(freq, shifted_1.mean(axis=0))
+fig.supxlabel('Frequency [MHz]', fontsize=14)
+fig.supylabel('Intensity [Jy]', fontsize=14)
 fig.tight_layout()
-fig.savefig("results/umap_projection.pdf")
 plt.show()
+
+
+# %%
+from moviepy import ImageSequenceClip
+
+editor = ImageSequenceClip("Data/velocity_correction.mp4")
+
+
