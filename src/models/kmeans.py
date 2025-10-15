@@ -15,7 +15,7 @@ from src.features.transformations import transform_signal
 
 class CustomKMeans(BaseEstimator, ClusterMixin):
     def __init__(self, n_clusters=8, n_init=5, max_iter=100,
-                 tol=1e-4, random_state=42, distance_metric=None):
+                 tol=1e-4, random_state=42, distance_metric="cosine"):
         self.n_clusters = n_clusters
         self.n_init = n_init
         self.max_iter = max_iter

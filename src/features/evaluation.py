@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 def within_cluster_similarity(data: np.ndarray, labels: list,
                               std: bool = False,
                               plot: bool = False,
-                              title: str = None) -> np.ndarray:
+                              title: str = None, 
+                              save: str = None) -> np.ndarray:
     """
     Evaluate the within-cluster similarity of the data
     :param data: 2D numpy array containing the data for each signal
@@ -57,6 +58,9 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
         sorted_wcs = within_cluster_similarity[np.argsort(sizes)[::-1]]
         sorted_percentages = percentages[np.argsort(sizes)[::-1]]
         
+        # Calculate average wcs
+        average_wcs = np.average(within_cluster_similarity, weights=sizes)
+        
         # Plot the within-cluster similarity
         width = 0.8
         plt.figure(figsize=(8, 4))
@@ -67,7 +71,7 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
             plt.bar(np.arange(len(clusters)), sorted_wcs, width, color='tab:blue')
         plt.xlabel('Cluster')
         plt.ylabel('Cosine Similarity')
-        plt.title('Within-Cluster Similarity') if title is None else plt.title(title)
+        plt.axhline(average_wcs, linestyle='--', color='black')
 
         # Add percentage of signals that belong to each cluster
         for i, percentage in enumerate(sorted_percentages):
@@ -75,6 +79,9 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
                 plt.text(i, sorted_wcs[i], f'{percentage}%', ha='center', va='bottom')
             else:
                 plt.text(i - width / 4, sorted_wcs[i], f'{percentage}%', ha='center', va='bottom')
+
+        if save is not None:
+            plt.savefig(save)
 
         plt.show()
 

@@ -156,7 +156,7 @@ class RedShiftCorrector:
             raw_data: np.ndarray,
             mapping: list,
             residual: np.ndarray = None,
-            filtering: list = ['None', 'subtraction', 'sigma'],
+            filtering: list = ['None', 'subtraction', 'threshold'],
             method: str = "grid") -> pd.DataFrame:
         """
         Find the velocities of all sources according to a majority-voting scheme
@@ -366,12 +366,13 @@ def interpolate_data(data_dict: dict):
 
     interpolated_data = {}
     common_frequency = []
+    regions = sorted(list(data_dict.keys()))
     for spw in range(2):
         min_f = None
         max_f = None
         # Iterate through the frequency data of all regions for each spw
-        for region in data_dict.keys():
-            for core in data_dict[region].keys():
+        for region in regions:
+            for core in sorted(list(data_dict[region].keys())):
                 freq_array = data_dict[region][core][spw]['Frequency']
                 if min_f is None:
                     min_f = freq_array.min()
@@ -388,9 +389,9 @@ def interpolate_data(data_dict: dict):
 
     # Interpolate the data based on this new frequency
     keys = ['Temperature', 'Intensity', 'Residual']
-    for region in tqdm(data_dict.keys(), desc=f'Interpolating data'):
+    for region in tqdm(regions, desc=f'Interpolating data'):
         interpolated_data[region] = {}
-        for core in data_dict[region].keys():
+        for core in sorted(list(data_dict[region].keys())):
             interpolated_data[region][core] = {}
             for spw in range(2):
                 # Interpolate data
