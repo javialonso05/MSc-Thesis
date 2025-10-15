@@ -86,12 +86,12 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
         plt.show()
 
     if std:
-        return within_cluster_similarity, within_cluster_std
+        return within_cluster_similarity[np.argsort(sizes)[::-1]], within_cluster_std[np.argsort(sizes)[::-1]]
 
-    return within_cluster_similarity
+    return within_cluster_similarity[np.argsort(sizes)[::-1]]
 
 
-def between_cluster_similarity(signals, labels, plot=False, text=False):
+def between_cluster_similarity(signals: np.ndarray, labels: np.ndarray, wcs: np.ndarray = None, plot=False, text=False):
     """
 
     Args:
@@ -100,6 +100,10 @@ def between_cluster_similarity(signals, labels, plot=False, text=False):
         plot (bool, optional): _description_. Defaults to False.
     """
     from sklearn.metrics.pairwise import cosine_similarity
+    
+    if wcs is None:
+        wcs = np.ones(len(np.unique(labels)))
+    
     unique_labels, sizes = np.unique(labels, return_counts=True)
     sorted_labels = unique_labels[np.argsort(sizes)[::-1]]
     bcs = np.zeros((len(unique_labels), len(unique_labels)))
@@ -109,15 +113,15 @@ def between_cluster_similarity(signals, labels, plot=False, text=False):
                 continue
             signals_i = signals[labels == label_i]
             signals_j = signals[labels == label_j]
-            bcs[i, j] = np.mean(cosine_similarity(signals_i, signals_j))
+            bcs[i, j] = np.mean(cosine_similarity(signals_i, signals_j)) / wcs[i]
 
     if plot:
-        plt.figure(figsize=(3*len(bcs), 3*len(bcs)))
-        plt.matshow(bcs)
+        plt.figure(figsize=(5, 5))
+        plt.imshow(bcs, cmap='viridis', vmin=0, vmax=1, origin='upper')
         if text:
             for i in range(len(bcs)):
                 for j in range(len(bcs)):
-                    plt.text(i, j, np.round(bcs[i, j], 2), ha="center", va="center", color="white")
+                    plt.text(j, i, np.round(bcs[i, j], 2), ha="center", va="center", color="white")
         else:
             plt.colorbar()
         plt.show()

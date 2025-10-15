@@ -42,7 +42,6 @@ def plot_kde_gmm(data, bandwidth=None, gridsize=100, n_components=3):
     fig, ax = plt.subplots(figsize=(8, 6))
 
     plt.pcolormesh(X, Y, Z_kernel, shading='auto', cmap='viridis')
-    plt.colorbar(label='Density')
 
     scatter = ax.scatter(x, y, c=labels, cmap='tab10', s=30, alpha=0.6, label='Data Points')  # Data Points
 
@@ -52,7 +51,6 @@ def plot_kde_gmm(data, bandwidth=None, gridsize=100, n_components=3):
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
 
-    fig.suptitle("Kernel Density Estimation with GMM Classification")
     legend1 = ax.legend(*scatter.legend_elements(), title="Classes")
     ax.add_artist(legend1)
 
