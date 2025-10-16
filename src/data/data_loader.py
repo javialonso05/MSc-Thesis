@@ -3,13 +3,6 @@ import os
 from tqdm import tqdm
 
 
-"""
-The purpose of this file is to extract the raw data from the .tar file it is provided on.
-    - Input: sources.tar
-    - Output: 
-"""
-
-
 def extract_tar(source_dir, destination_dir):
     """
     Extracts the signals from the .tar file from the source directory and places the extracted files in the
@@ -48,22 +41,4 @@ def extract_signals(base_dir):
             extract_tar(folder_path, f'Data/Raw/sources_extracted/{folder}')
         except Exception as e:
             n_errors += 1
-
-
-if __name__ == '__main__':
-    # Define the base directory
-    base_directory = 'Data/Raw/sources'
-    extract_signals(base_directory)
-    n = 0
-
-    for folder in tqdm(os.listdir(base_directory), desc="Counting files"):
-        # Access each folder in sources
-        folder_path = os.path.join(base_directory, folder)
-
-        # Add path to the  .tar file
-        folder_path = os.path.join(folder_path, 'analysis/spectra/7MTM2TM1')
-        if not os.path.isfile("core-spectra.tar"):
-            n += 1
-
-    print(f'Folders without files: {n}/{len(os.listdir(base_directory))}')
 

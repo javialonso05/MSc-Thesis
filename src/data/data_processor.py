@@ -6,7 +6,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from sklearn.metrics.pairwise import cosine_similarity
-from src.features.transformations import shift_signal, transform_signal
+from src.features.transformations import shift_signal
 
 
 class RedShiftCorrector:
@@ -250,7 +250,6 @@ class RedShiftCorrector:
         return results      
                    
 
-# Loading data functions
 def load_data(base_dir: str):
     """
     Load data from the original file format into a dictionary with pandas dataframes
