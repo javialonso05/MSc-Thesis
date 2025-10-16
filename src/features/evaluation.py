@@ -91,7 +91,13 @@ def within_cluster_similarity(data: np.ndarray, labels: list,
     return within_cluster_similarity[np.argsort(sizes)[::-1]]
 
 
-def between_cluster_similarity(signals: np.ndarray, labels: np.ndarray, wcs: np.ndarray = None, plot=False, text=False):
+def between_cluster_similarity(
+    signals: np.ndarray,
+    labels: np.ndarray,
+    wcs: np.ndarray = None,
+    plot=False,
+    text=False,
+    save=None):
     """
 
     Args:
@@ -124,6 +130,9 @@ def between_cluster_similarity(signals: np.ndarray, labels: np.ndarray, wcs: np.
                     plt.text(j, i, np.round(bcs[i, j], 2), ha="center", va="center", color="white")
         else:
             plt.colorbar()
+        
+        if save is not None:
+            plt.savefig(save, bbox_inches='tight')
         plt.show()
     return bcs
 
